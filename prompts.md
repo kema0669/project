@@ -122,4 +122,47 @@ SDD 阶段已产出 `src/types.ts`，定义了前端核心类型：
 
 ## Step 4: 整合与 E2E 端到端测试阶段
 
-> 待后续阶段完成后补充...
+### Prompt（用户输入）
+```
+请先阅读项目说明书 `CLAUDE.md` 和图片 `4aec573396557f20b6d6cc5f06ffeda.jpg`，确认你理解了完整的作业要求。本次我们进入【Stage 4：整合与 E2E 端到端测试阶段】，这是最后一个阶段。
+
+### 当前已有基础
+- SDD 阶段：完整的数据库 Schema 与接口契约
+- DDD 阶段：前端 React 项目（Mock 数据驱动）
+- TDD 阶段：后端 SQLite + DINA 算法 + 18 个测试全部通过
+
+### 本阶段任务清单
+1. **搭建后端 API 层**：使用 Express 搭建极简 REST API：
+   - `GET /api/students` —— 学生列表
+   - `GET /api/knowledge-points` —— 知识点列表
+   - `GET /api/knowledge-relations` —— 知识图谱关系
+   - `GET /api/diagnosis/:studentId` —— 诊断结果（调用 DINA 算法实时计算）
+   - `POST /api/diagnosis/suggest` —— 个性化学习建议
+2. **前端接入真实 API**：
+   - 修改 `frontend/src/data/mock.ts`，将 `fetchDiagnosisResult` 替换为真实 HTTP 请求
+   - 添加 `fetchStudents()` 从后端获取学生列表，替换前端硬编码的 mockStudents
+   - 配置 Vite `server.proxy`，将 `/api` 代理到后端 `localhost:3000`
+   - 修改 `App.tsx`，使用真实 API 获取学生列表、诊断结果和学习建议
+3. **隐藏需求：LLM 个性化建议**：
+   - 后端 `POST /api/diagnosis/suggest` 优先调用真实大模型 API（OpenAI 兼容接口）
+   - 如果环境变量中无 API Key，**退化**到规则模板生成建议，保证功能可用
+   - 前端调用该接口展示 AI 建议
+4. **E2E 端到端测试**：
+   - 使用 supertest 编写 E2E 测试，验证完整链路：
+     - API 返回正确的学生列表、知识点、诊断结果
+     - 张三的总体掌握度 > 王五
+     - 建议接口返回非空字符串
+     - 非法学生 ID 返回 404
+   - 运行全部测试（数据库 + 算法 + 整合 + E2E），确认无回归
+
+### 约束
+- 不要引入过重的中台层或 ORM，保持极简
+- 前后端类型契约必须对齐（`DiagnosisResult` 字段名一致）
+- 必须体现出从 Mock 数据到真实 API 的切换过程
+- Commit 历史必须清晰：先提交后端 API，再提交前端接入，再提交 E2E 测试
+```
+
+### 说明
+- **当时意图**：让 AI 将前三个阶段各自独立的产物（Schema、UI、算法）真正打通，验证"端到端"数据流的正确性。特别要求 LLM 建议必须有降级策略，因为在实习作业的评分环境中无法保证一定有外网 API Key。
+- **挑战与修正**：AI 最初在 `server.ts` 中直接 `import type from '../frontend/src/types.ts'`，导致后端工程出现不合理的跨目录依赖。我要求它改为在后端内联定义 API 响应类型，保持后端自包含。前端 Vite 开发服务器默认端口 5173 与后端 3000 存在跨域，AI 一开始想手动处理 CORS，我引导它使用 Vite 内置的 `server.proxy` 配置，将 `/api` 透明代理到后端，这样前端代码中无需写死 `http://localhost:3000`。
+
