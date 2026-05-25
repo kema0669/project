@@ -1,0 +1,62 @@
+{
+  "permissions": {
+    "allow": [
+      {
+        "command": "npm *",
+        "type": "bash"
+      },
+      {
+        "command": "npx *",
+        "type": "bash"
+      },
+      {
+        "command": "node *",
+        "type": "bash"
+      },
+      {
+        "command": "python *",
+        "type": "bash"
+      },
+      {
+        "command": "pip *",
+        "type": "bash"
+      },
+      {
+        "command": "git *",
+        "type": "bash"
+      },
+      {
+        "command": "sqlite3 *",
+        "type": "bash"
+      },
+      {
+        "command": "mkdir *",
+        "type": "bash"
+      },
+      {
+        "command": "rm *",
+        "type": "bash"
+      },
+      {
+        "command": "cp *",
+        "type": "bash"
+      },
+      {
+        "command": "mv *",
+        "type": "bash"
+      },
+      {
+        "command": "cat *",
+        "type": "bash"
+      },
+      {
+        "command": "ls *",
+        "type": "bash"
+      },
+      {
+        "command": "curl *",
+        "type": "bash"
+      }
+    ]
+  }
+}
