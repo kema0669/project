@@ -3,6 +3,8 @@
  * 将数据库层与 DINA 算法层通过 HTTP 暴露给前端。
  */
 
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import { initDatabase } from './db.js';
@@ -164,4 +166,10 @@ export function startServer(port = 3000) {
   app.listen(port, () => {
     console.log(`Cognitive Diagnosis API running on http://localhost:${port}`);
   });
+}
+
+// 仅在直接运行时启动服务器，避免被测试导入时自动启动
+const __filename = fileURLToPath(import.meta.url);
+if (path.normalize(__filename) === path.normalize(process.argv[1] || '')) {
+  startServer(Number(process.env.PORT) || 3000);
 }
