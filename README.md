@@ -28,10 +28,11 @@
 .
 ├── README.md                 # 本文件
 ├── CLAUDE.md                 # 项目说明书（作业要求）
-├── prompts.md                # 核心 Prompt 记录文档（4 阶段完整）
+├── prompts.md                # 核心 Prompt 记录文档（5 阶段完整：Step 0~4）
 ├── docs/
 │   ├── schema.md             # SDD 阶段：数据库 Schema、ER 图、API 契约
-│   └── ui-design.md          # DDD 阶段：UI/UX 设计文档
+│   ├── ui-design.md          # DDD 阶段：UI/UX 设计文档
+│   └── process.md            # 开发过程思路说明（业务转化、AI协同问题、效率思考）
 ├── frontend/                 # DDD + Stage4 产物
 │   ├── package.json
 │   ├── vite.config.ts
@@ -148,10 +149,10 @@ npm test          # 运行全部 25 个测试
 
 - [x] 完整项目源码（本仓库）
 - [x] 算法逻辑说明（见上文"核心算法"及 `backend/src/algorithm/dina.ts` 注释）
-- [x] 开发文档（`docs/schema.md`、`docs/ui-design.md`、`prompts.md`）
+- [x] 开发文档（`docs/schema.md`、`docs/ui-design.md`、`docs/process.md`、`prompts.md`）
 - [x] 环境配置与运行指南（见上文"快速开始"）
 - [x] 清晰的 Git Commit 演进历史（SDD → DDD → TDD → Stage 4）
-- [x] 核心 Prompt 记录文档（≥ 5 段，4 阶段完整）
+- [x] 核心 Prompt 记录文档（≥ 5 段，Step 0~4 完整）
 
 ## 隐藏需求（加分项）
 
