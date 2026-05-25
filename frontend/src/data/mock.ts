@@ -105,12 +105,33 @@ for (const student of mockStudents) {
 }
 
 /**
- * 模拟异步获取诊断结果（DDD阶段用mock数据，E2E阶段替换为真实API）
+ * Stage 4: 从后端 API 获取学生列表
  */
-export function fetchDiagnosisResult(studentId: number): Promise<DiagnosisResult> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockDiagnosisResults[studentId]);
-    }, 300); // 模拟网络延迟 300ms
+export async function fetchStudents(): Promise<StudentOption[]> {
+  const res = await fetch('/api/students');
+  const data = await res.json() as { students: StudentOption[] };
+  return data.students;
+}
+
+/**
+ * Stage 4: 从后端 API 获取诊断结果（替换 DDD 阶段的 mock 数据）
+ */
+export async function fetchDiagnosisResult(studentId: number): Promise<DiagnosisResult> {
+  const res = await fetch(`/api/diagnosis/${studentId}`);
+  if (!res.ok) throw new Error('Failed to fetch diagnosis');
+  return res.json() as Promise<DiagnosisResult>;
+}
+
+/**
+ * Stage 4: 从后端 API 获取 LLM 生成的个性化学习建议
+ */
+export async function fetchSuggestion(result: DiagnosisResult): Promise<string> {
+  const res = await fetch('/api/diagnosis/suggest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ diagnosisResult: result }),
   });
+  if (!res.ok) throw new Error('Failed to fetch suggestion');
+  const data = await res.json() as { suggestion: string };
+  return data.suggestion;
 }
