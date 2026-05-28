@@ -1,17 +1,61 @@
 export type Role = 'teacher' | 'student';
+export type AccountStatus = 'pending' | 'approved' | 'rejected';
 export type LoadingState = 'idle' | 'loading' | 'success' | 'error';
 
 export interface AuthUser {
   id: number;
   username: string;
   role: Role;
+  status: AccountStatus;
   displayName: string;
   studentId?: number;
+  studentNo?: string;
 }
 
 export interface LoginResult {
   token: string;
   user: AuthUser;
+}
+
+export interface StudentRegistrationResult {
+  user: {
+    id: number;
+    username: string;
+    role: 'student';
+    status: AccountStatus;
+  };
+  binding: {
+    studentId: number;
+    studentNo: string;
+    studentName: string;
+    status: AccountStatus;
+  };
+  message: string;
+}
+
+export interface StudentStatus {
+  userId: number;
+  username: string;
+  status: AccountStatus;
+  student: {
+    id: number;
+    studentNo: string;
+    name: string;
+    classId: number | null;
+  } | null;
+  canViewResults: boolean;
+}
+
+export interface StudentApproval {
+  userId: number;
+  username: string;
+  status: AccountStatus;
+  studentId: number;
+  studentNo: string;
+  studentName: string;
+  classId: number;
+  className: string;
+  createdAt: string;
 }
 
 export interface TeacherClass {

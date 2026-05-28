@@ -127,3 +127,78 @@ Complete integration tests and delivery documents:
 ### Note
 
 The intent was to make the project presentable, not just runnable. The browser automation tool failed in the local Windows sandbox, so the verification emphasis shifted to executable backend E2E plus build/lint/test commands.
+
+## Extension Step 1: Student Registration Binding Design
+
+### Prompt
+
+```text
+Continue developing the existing intelligent cognitive diagnosis platform.
+
+New feature: students can register accounts by entering username, password, and student_no.
+The backend must bind the account to an existing student score record by student_no.
+The student account must be pending until a teacher approves it.
+
+Only update design documents first:
+1. docs/schema.md
+2. docs/api.md
+3. docs/architecture.md
+
+Design users.status, students.user_id, student_no binding rules, teacher approval APIs, and permission boundaries.
+Do not implement backend logic, frontend pages, email verification, SMS verification, OCR, PDF, Word parsing, or a complex admin backend.
+```
+
+### Note
+
+The intent was to keep the new feature small and interview-friendly. The important design choice was using `student_no` plus teacher approval instead of fuzzy name matching or external verification.
+
+## Extension Step 2: Student Registration TDD And Implementation
+
+### Prompt
+
+```text
+Now enter the TDD and backend implementation stages for student registration and teacher approval.
+
+First write backend tests for:
+1. student_no exists and is unbound -> create pending account
+2. student_no missing -> clear validation error
+3. student_no already bound -> conflict
+4. pending/rejected students cannot view results
+5. teacher can list, approve, and reject pending applications
+6. approved student can view only their own results
+7. non-teacher users cannot review applications
+
+Then implement only the backend logic needed to make those tests pass.
+Do not rebuild the project, remove Excel upload, add OCR/PDF/Word parsing, add email/SMS verification, or introduce real LLM calls.
+```
+
+### Note
+
+The red tests prevented the implementation from drifting into UI or admin-system work. The backend kept compatibility aliases for earlier endpoint names while documenting `/api/auth/register-student` and `/api/teacher/student-approvals` as the main API.
+
+## Extension Step 3: Frontend And E2E Delivery
+
+### Prompt
+
+```text
+Implement the frontend pages for the student registration and teacher approval flow.
+
+Student side:
+- registration page with username, password, student_no
+- pending waiting page
+- rejected status page
+- approved students enter the existing result and diagnosis page
+
+Teacher side:
+- pending approval list
+- approve button
+- reject button
+- success/failure feedback
+
+Then add E2E coverage for student registration, pending block, teacher approval, approved access, rejection block, and cross-student access denial.
+Keep React + TypeScript and the existing education SaaS style.
+```
+
+### Note
+
+The frontend was added inside the existing single-app structure instead of introducing a new router or rebuilding the UI. The E2E test stayed API-level because the project already used Vitest + supertest and had no Playwright setup.

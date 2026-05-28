@@ -8,6 +8,14 @@ For a resume MVP, I deliberately kept the product loop small. The teacher logs i
 
 The system was therefore split into contracts before code. The database schema defines users, classes, students, questions, Q matrix rows, responses, uploads, diagnosis results, and recommendations. The API contract defines auth, teacher upload preview/confirm, and student personal result endpoints. The Excel contract fixes the upload format to `student_no`, `student_name`, `class_name`, `exam_name`, and `q1` to `q20`, which makes validation deterministic.
 
+## Why student_no Plus Teacher Approval
+
+For the student self-registration extension, I chose `student_no + teacher approval` because it matches the actual source of truth in this MVP: the teacher-uploaded score sheet. The score data already contains a stable student number, so the system can bind a login account to an existing student record without asking for extra personal data.
+
+I did not use name matching because names are not unique and are easy to mistype. A fuzzy name match would create security and data-quality risks: one student might accidentally bind another student's score record. I also did not add email or SMS verification because the assignment does not require a real identity provider, and those features would add infrastructure work without improving the core diagnosis story. A complex admin approval system was also avoided because the project only needs one practical review action: the teacher who owns the class approves or rejects the student binding.
+
+This keeps the project easy to explain in interviews: the teacher controls the uploaded academic records, students request access by `student_no`, and the teacher confirms whether the account should see that record.
+
 ## AI Collaboration Problems And Fixes
 
 The first typical issue was scope drift. The project previously grew toward multi-subject analysis, Word/PDF parsing, and AI-assisted paper drafts. Those ideas are interesting, but they made the resume story too wide. I corrected the AI agent by adding explicit non-goals: no OCR, no Word/PDF parsing, no multi-tenant school backend, no real LLM call in the basic MVP.

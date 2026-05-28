@@ -8,7 +8,7 @@ This project is a full-stack educational diagnosis MVP for resume and interview 
 Teacher imports a fixed score sheet.
 The system validates and stores answer data.
 The backend runs a DINA-based diagnosis.
-Students log in and can only view their own results.
+Students self-register with student_no, wait for teacher approval, then log in and can only view their own results.
 ```
 
 ## Non-Goals
@@ -34,6 +34,7 @@ flowchart LR
     Frontend --> API[Express + TypeScript API]
     API --> Auth[JWT Auth + RBAC Middleware]
     API --> Upload[Excel Parser + Validator]
+    API --> Review[Student Binding Review]
     API --> Diagnosis[DINA Diagnosis Service]
     API --> Recommend[Rule Recommendation Service]
     API --> DB[(SQLite)]
@@ -43,7 +44,7 @@ flowchart LR
 
 | Step | Phase | Output |
 | --- | --- | --- |
-| 1 | SDD | Schema, API contract, Excel template, architecture docs. |
+| 1 | SDD | Schema, API contract, Excel template, architecture docs, student registration and binding design. |
 | 2 | Scaffold | `frontend` and `backend` project skeleton. |
 | 3 | TDD | Backend tests for auth, upload validation, RBAC, and diagnosis. |
 | 4 | Backend | SQLite, seed data, JWT, upload flow, DINA, student APIs. |
@@ -62,6 +63,8 @@ Can:
 - preview upload validation results,
 - confirm valid uploads,
 - view class-level diagnosis summaries for their own classes.
+- view pending student registration and binding applications for classes they own,
+- approve or reject pending student account bindings.
 
 Cannot:
 
@@ -69,16 +72,19 @@ Cannot:
 - view another teacher's classes,
 - bypass preview validation,
 - confirm uploads with validation errors.
+- approve or reject students outside their own classes.
 
 ### Student
 
 Can:
 
+- register with `username`, `password`, and `student_no`,
+- check their own binding and review status,
 - log in as `student`,
-- view their own exam scores,
-- view their own knowledge mastery profile,
-- view their own weak points,
-- view their own learning recommendation.
+- view their own exam scores only after approval,
+- view their own knowledge mastery profile only after approval,
+- view their own weak points only after approval,
+- view their own learning recommendation only after approval.
 
 Cannot:
 
@@ -86,6 +92,7 @@ Cannot:
 - query by arbitrary `studentId`,
 - access teacher upload APIs,
 - view class-level dashboards.
+- view any score or diagnosis data while `pending` or `rejected`.
 
 ## Auth Flow
 
@@ -106,6 +113,44 @@ sequenceDiagram
     API->>API: Verify JWT and role
     API-->>FE: Protected data
 ```
+
+## Student Registration and Teacher Review Flow
+
+```mermaid
+sequenceDiagram
+    participant S as Student
+    participant FE as Frontend
+    participant API as Backend API
+    participant DB as SQLite
+    participant T as Teacher
+
+    S->>FE: Enter username/password/student_no
+    FE->>API: POST /api/auth/register/student
+    API->>DB: Find students.student_no
+    alt student_no not found
+        API-->>FE: VALIDATION_ERROR: 未找到该学号，请确认老师已上传成绩。
+    else student_no already has user_id
+        API-->>FE: CONFLICT: 该学号已绑定账号。
+    else student_no exists and is unbound
+        API->>DB: Create student user with status pending
+        API->>DB: Set students.user_id
+        API-->>FE: Pending review status
+    end
+    T->>FE: Open pending registrations
+    FE->>API: GET /api/teacher/student-registrations?status=pending
+    API->>DB: Query only teacher-owned classes
+    API-->>FE: Pending applications
+    T->>FE: Approve or reject
+    FE->>API: POST approve/reject endpoint
+    API->>DB: Update users.status
+    API-->>FE: Updated status
+```
+
+Review status behavior:
+
+- `pending`: student can log in and call `/api/student/me/binding-status`, but cannot view results.
+- `approved`: student can view only the results linked through their own `students.user_id`.
+- `rejected`: student can log in and see the rejected status, but cannot view results.
 
 ## Teacher Upload Flow
 
@@ -143,6 +188,7 @@ sequenceDiagram
 
     S->>FE: Open student dashboard
     FE->>API: GET /api/student/me/results
+    API->>API: Require user.status = approved
     API->>API: Resolve student from JWT
     API->>DB: Query own scores only
     DB-->>API: Score list
@@ -159,10 +205,13 @@ sequenceDiagram
 | Route | Role | Purpose |
 | --- | --- | --- |
 | `/login` | public | Shared login page. |
+| `/register/student` | public | Student self-registration with `student_no`. |
 | `/teacher/classes` | teacher | Class list and latest diagnosis summary entry. |
 | `/teacher/uploads` | teacher | Excel upload form. |
 | `/teacher/uploads/:uploadId/preview` | teacher | Preview valid rows and errors. |
 | `/teacher/classes/:classId/diagnosis` | teacher | Class diagnosis overview. |
+| `/teacher/student-registrations` | teacher | Pending student account binding review. |
+| `/student/status` | student | Pending/rejected/approved binding status page. |
 | `/student/results` | student | Student score list. |
 | `/student/diagnosis/:examId` | student | Mastery chart, weak points, recommendation. |
 
@@ -178,6 +227,8 @@ Suggested module boundaries:
 | `seed` | Demo teacher, students, class, questions, Q matrix. |
 | `excel` | `.xlsx` parsing and row validation. |
 | `uploads` | Preview and confirm workflow. |
+| `studentRegistration` | Student self-registration, student_no binding, pending status query. |
+| `studentReview` | Teacher-owned pending application list, approve, and reject actions. |
 | `diagnosis` | DINA input building and mastery calculation. |
 | `recommendations` | Rule-based advice from weak knowledge points. |
 | `routes` | Express route registration. |

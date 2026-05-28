@@ -101,7 +101,10 @@ select {
 }
 
 .quickLogins button,
-.userBox button {
+.userBox button,
+.secondaryButton,
+.rowActions button,
+.segmented button {
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid #cbd5e1;
@@ -109,6 +112,29 @@ select {
   background: #ffffff;
   color: #334155;
   cursor: pointer;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.segmented button {
+  border-color: transparent;
+}
+
+.segmented .activeSegment {
+  background: #0f8b8d;
+  color: #ffffff;
+}
+
+.secondaryButton {
+  min-width: 72px;
 }
 
 .primaryButton {
@@ -133,6 +159,13 @@ select {
   font-size: 14px;
 }
 
+.formSuccess {
+  margin: 0;
+  color: #0f766e;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 .appHeader {
   display: flex;
   align-items: center;
@@ -153,10 +186,26 @@ select {
   gap: 12px;
 }
 
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #e6f7f7;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .workspace {
   width: min(1180px, 100%);
   margin: 0 auto;
   padding: 24px 16px 48px;
+}
+
+.workspace > .panel {
+  margin-bottom: 18px;
 }
 
 .metrics {
@@ -248,6 +297,12 @@ th {
   background: #f8fafc;
 }
 
+.rowActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .successPanel,
 .emptyPanel {
   padding: 18px;
@@ -256,6 +311,58 @@ th {
 
 .emptyPanel {
   color: #526173;
+}
+
+.mutedText {
+  margin: 0;
+  color: #64748b;
+}
+
+.statusPanel {
+  padding: 28px;
+  background: #ffffff;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.statusPanel h2 {
+  margin: 14px 0 8px;
+  color: #102033;
+  font-size: 24px;
+}
+
+.statusPanel p {
+  margin: 0;
+  color: #526173;
+  line-height: 1.7;
+}
+
+.statusGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.statusGrid > div {
+  padding: 14px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.statusGrid span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.statusGrid strong {
+  display: block;
+  margin-top: 5px;
+  color: #102033;
 }
 
 .studentTopbar {
@@ -338,7 +445,8 @@ th {
 @media (max-width: 800px) {
   .loginPanel,
   .twoColumn,
-  .metrics {
+  .metrics,
+  .statusGrid {
     grid-template-columns: 1fr;
   }
 

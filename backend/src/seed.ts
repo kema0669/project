@@ -120,11 +120,12 @@ function recomputeRanks(db: Database.Database): void {
 
 function seedMvpData(db: Database.Database): void {
   const insertUser = db.prepare(`
-    INSERT INTO users (id, username, password_hash, role, display_name)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO users (id, username, password_hash, role, status, display_name)
+    VALUES (?, ?, ?, ?, 'approved', ?)
     ON CONFLICT(username) DO UPDATE SET
       password_hash = excluded.password_hash,
       role = excluded.role,
+      status = excluded.status,
       display_name = excluded.display_name
   `);
   const insertClass = db.prepare(`

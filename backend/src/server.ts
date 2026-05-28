@@ -50,8 +50,10 @@ type AuthUser = {
   id: number;
   username: string;
   role: 'teacher' | 'student';
+  status: 'pending' | 'approved' | 'rejected';
   displayName: string;
   studentId?: number;
+  studentNo?: string;
 };
 
 type AuthedRequest = express.Request & { user?: AuthUser };
@@ -101,9 +103,44 @@ function getStudentIdForUser(userId: number): number | undefined {
   return row?.id;
 }
 
+function getStudentBindingForUser(userId: number):
+  | { id: number; studentNo: string; name: string; classId: number | null }
+  | undefined {
+  return db
+    .prepare('SELECT id, student_no AS studentNo, name, class_id AS classId FROM students WHERE user_id = ?')
+    .get(userId) as { id: number; studentNo: string; name: string; classId: number | null } | undefined;
+}
+
+function requireApprovedStudent(req: AuthedRequest, res: express.Response): number | undefined {
+  if (req.user?.status !== 'approved') {
+    fail(res, 403, 'FORBIDDEN', '账号尚未通过老师审核，暂不能查看成绩。');
+    return undefined;
+  }
+  if (!req.user.studentId) {
+    fail(res, 404, 'NOT_FOUND', 'Student profile not found.');
+    return undefined;
+  }
+  return req.user.studentId;
+}
+
 function teacherOwnsClass(teacherUserId: number, classId: number): boolean {
   const row = db.prepare('SELECT id FROM classes WHERE id = ? AND teacher_user_id = ?').get(classId, teacherUserId);
   return Boolean(row);
+}
+
+function getOptionalAuthUser(req: express.Request): AuthUser | undefined {
+  const header = req.header('Authorization') ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
+  return token ? parseToken(token) : undefined;
+}
+
+function forbidOtherStudent(req: express.Request, res: express.Response, targetStudentId: number): boolean {
+  const user = getOptionalAuthUser(req);
+  if (user?.role === 'student' && user.studentId !== targetStudentId) {
+    fail(res, 403, 'FORBIDDEN', 'Students can only access their own results.');
+    return true;
+  }
+  return false;
 }
 
 function requiredExcelHeaders(): string[] {
@@ -255,26 +292,103 @@ function masteryLevel(probability: number): 'weak' | 'medium' | 'strong' {
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body ?? {};
   const row = db
-    .prepare('SELECT id, username, password_hash AS passwordHash, role, display_name AS displayName FROM users WHERE username = ?')
+    .prepare(
+      `SELECT id,
+              username,
+              password_hash AS passwordHash,
+              role,
+              status,
+              display_name AS displayName
+       FROM users
+       WHERE username = ?`
+    )
     .get(username) as
-    | { id: number; username: string; passwordHash: string; role: 'teacher' | 'student'; displayName: string }
+    | {
+        id: number;
+        username: string;
+        passwordHash: string;
+        role: 'teacher' | 'student';
+        status: 'pending' | 'approved' | 'rejected';
+        displayName: string;
+      }
     | undefined;
   if (!row || row.passwordHash !== password) {
     fail(res, 401, 'UNAUTHORIZED', 'Invalid username or password.');
     return;
   }
+  const binding = row.role === 'student' ? getStudentBindingForUser(row.id) : undefined;
   const user: AuthUser = {
     id: row.id,
     username: row.username,
     role: row.role,
+    status: row.status,
     displayName: row.displayName,
-    studentId: row.role === 'student' ? getStudentIdForUser(row.id) : undefined,
+    studentId: binding?.id,
+    studentNo: binding?.studentNo,
   };
   ok(res, {
     token: issueToken(user),
     user,
   });
 });
+
+function registerStudentAccount(req: express.Request, res: express.Response): void {
+  const { username, password } = req.body ?? {};
+  const studentNo = String(req.body?.student_no ?? req.body?.studentNo ?? '').trim();
+  if (!username || !password || !studentNo) {
+    fail(res, 400, 'VALIDATION_ERROR', 'username, password and student_no are required.');
+    return;
+  }
+
+  const existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (existingUser) {
+    fail(res, 409, 'CONFLICT', '用户名已存在。');
+    return;
+  }
+
+  const student = db
+    .prepare('SELECT id, name, student_no AS studentNo, user_id AS userId FROM students WHERE student_no = ?')
+    .get(studentNo) as { id: number; name: string; studentNo: string; userId: number | null } | undefined;
+  if (!student) {
+    fail(res, 400, 'VALIDATION_ERROR', '未找到该学号，请确认老师已上传成绩。');
+    return;
+  }
+  if (student.userId) {
+    fail(res, 409, 'CONFLICT', '该学号已绑定账号。');
+    return;
+  }
+
+  const trx = db.transaction(() => {
+    const created = db
+      .prepare(
+        "INSERT INTO users (username, password_hash, role, status, display_name) VALUES (?, ?, 'student', 'pending', ?)"
+      )
+      .run(username, password, username);
+    const userId = Number(created.lastInsertRowid);
+    db.prepare('UPDATE students SET user_id = ? WHERE id = ?').run(userId, student.id);
+    return userId;
+  });
+  const userId = trx();
+
+  ok(res, {
+    user: {
+      id: userId,
+      username,
+      role: 'student',
+      status: 'pending',
+    },
+    binding: {
+      studentId: student.id,
+      studentNo: student.studentNo,
+      studentName: student.name,
+      status: 'pending',
+    },
+    message: '注册成功，等待老师审核。',
+  });
+}
+
+app.post('/api/auth/register-student', registerStudentAccount);
+app.post('/api/auth/register/student', registerStudentAccount);
 
 app.get('/api/teacher/classes', auth('teacher'), (req: AuthedRequest, res) => {
   const rows = db
@@ -439,12 +553,118 @@ app.post('/api/teacher/uploads/:uploadId/confirm', auth('teacher'), (req: Authed
   });
 });
 
-app.get('/api/student/me/results', auth('student'), (req: AuthedRequest, res) => {
-  const studentId = req.user!.studentId;
-  if (!studentId) {
-    fail(res, 404, 'NOT_FOUND', 'Student profile not found.');
+function listStudentApprovals(req: AuthedRequest, res: express.Response): void {
+  const status = String(req.query.status ?? 'pending');
+  if (!['pending', 'approved', 'rejected'].includes(status)) {
+    fail(res, 400, 'VALIDATION_ERROR', 'status must be pending, approved, or rejected.');
     return;
   }
+  const rows = db
+    .prepare(
+      `SELECT u.id AS userId,
+              u.username,
+              u.status,
+              s.id AS studentId,
+              s.student_no AS studentNo,
+              s.name AS studentName,
+              s.class_id AS classId,
+              c.name AS className,
+              u.created_at AS createdAt
+       FROM users u
+       JOIN students s ON s.user_id = u.id
+       JOIN classes c ON c.id = s.class_id
+       WHERE u.role = 'student'
+         AND u.status = ?
+         AND c.teacher_user_id = ?
+       ORDER BY u.created_at DESC, u.id DESC`
+    )
+    .all(status, req.user!.id);
+  ok(res, rows);
+}
+
+function reviewStudentApproval(req: AuthedRequest, res: express.Response, nextStatus: 'approved' | 'rejected'): void {
+  const routeId = Number(req.params.studentId ?? req.params.userId);
+  if (!routeId) {
+    fail(res, 400, 'VALIDATION_ERROR', 'studentId is required.');
+    return;
+  }
+
+  const row = db
+    .prepare(
+      `SELECT u.id AS userId,
+              u.status,
+              s.id AS studentId,
+              c.teacher_user_id AS teacherUserId
+       FROM students s
+       JOIN users u ON u.id = s.user_id
+       JOIN classes c ON c.id = s.class_id
+       WHERE s.id = ? OR u.id = ?`
+    )
+    .get(routeId, routeId) as
+    | { userId: number; status: 'pending' | 'approved' | 'rejected'; studentId: number; teacherUserId: number }
+    | undefined;
+
+  if (!row) {
+    fail(res, 404, 'NOT_FOUND', 'Student approval application not found.');
+    return;
+  }
+  if (row.teacherUserId !== req.user!.id) {
+    fail(res, 403, 'FORBIDDEN', 'Teacher does not own this student.');
+    return;
+  }
+  if (row.status !== 'pending') {
+    fail(res, 400, 'VALIDATION_ERROR', 'Only pending student accounts can be reviewed.');
+    return;
+  }
+
+  db.prepare('UPDATE users SET status = ? WHERE id = ?').run(nextStatus, row.userId);
+  ok(res, {
+    userId: row.userId,
+    studentId: row.studentId,
+    status: nextStatus,
+    message: nextStatus === 'approved' ? '学生账号已审核通过。' : '学生账号已拒绝。',
+  });
+}
+
+app.get('/api/teacher/student-approvals', auth('teacher'), listStudentApprovals);
+app.get('/api/teacher/student-registrations', auth('teacher'), listStudentApprovals);
+app.post('/api/teacher/student-approvals/:studentId/approve', auth('teacher'), (req: AuthedRequest, res) =>
+  reviewStudentApproval(req, res, 'approved')
+);
+app.post('/api/teacher/student-approvals/:studentId/reject', auth('teacher'), (req: AuthedRequest, res) =>
+  reviewStudentApproval(req, res, 'rejected')
+);
+app.post('/api/teacher/student-registrations/:userId/approve', auth('teacher'), (req: AuthedRequest, res) =>
+  reviewStudentApproval(req, res, 'approved')
+);
+app.post('/api/teacher/student-registrations/:userId/reject', auth('teacher'), (req: AuthedRequest, res) =>
+  reviewStudentApproval(req, res, 'rejected')
+);
+
+function getStudentStatus(req: AuthedRequest, res: express.Response): void {
+  const binding = getStudentBindingForUser(req.user!.id);
+  ok(res, {
+    userId: req.user!.id,
+    username: req.user!.username,
+    status: req.user!.status,
+    student: binding
+      ? {
+          id: binding.id,
+          studentNo: binding.studentNo,
+          name: binding.name,
+          classId: binding.classId,
+        }
+      : null,
+    canViewResults: req.user!.status === 'approved',
+  });
+}
+
+app.get('/api/student/me/status', auth('student'), getStudentStatus);
+app.get('/api/student/me/binding-status', auth('student'), getStudentStatus);
+
+app.get('/api/student/me/results', auth('student'), (req: AuthedRequest, res) => {
+  const studentId = requireApprovedStudent(req, res);
+  if (!studentId) return;
   const rows = db
     .prepare(
       `SELECT e.id AS examId,
@@ -459,14 +679,36 @@ app.get('/api/student/me/results', auth('student'), (req: AuthedRequest, res) =>
        GROUP BY e.id, e.name
        ORDER BY e.id DESC`
     )
+    .all(studentId) as unknown[];
+  if (rows.length > 0) {
+    ok(res, rows);
+    return;
+  }
+
+  const scoreRows = db
+    .prepare(
+      `SELECT eb.id AS examId,
+              eb.name AS examName,
+              ROUND(SUM(ss.score), 1) AS score,
+              ROUND(SUM(p.total_score), 1) AS total,
+              ROUND(SUM(ss.score) / SUM(p.total_score), 4) AS correctRate,
+              MAX(ss.created_at) AS createdAt
+       FROM student_scores ss
+       JOIN exam_batches eb ON eb.id = ss.exam_id
+       JOIN papers p ON p.id = ss.paper_id
+       WHERE ss.student_id = ?
+       GROUP BY eb.id, eb.name
+       ORDER BY eb.id DESC`
+    )
     .all(studentId);
-  ok(res, rows);
+  ok(res, scoreRows);
 });
 
 app.get('/api/student/me/diagnosis', auth('student'), (req: AuthedRequest, res) => {
-  const studentId = req.user!.studentId;
+  const studentId = requireApprovedStudent(req, res);
+  if (!studentId) return;
   const examId = Number(req.query.examId);
-  if (!studentId || !examId) {
+  if (!examId) {
     fail(res, 400, 'VALIDATION_ERROR', 'examId is required.');
     return;
   }
@@ -542,6 +784,7 @@ app.get('/api/exams', (_req, res) => {
 
 app.get('/api/students/:studentId/subjects', (req, res) => {
   const studentId = Number(req.params.studentId);
+  if (forbidOtherStudent(req, res, studentId)) return;
   const subjects = getStudentSubjects(db, studentId);
   if (subjects.length === 0) {
     res.status(404).json({ error: 'Student not found or has no configured subjects' });
@@ -552,6 +795,7 @@ app.get('/api/students/:studentId/subjects', (req, res) => {
 
 app.get('/api/students/:studentId/exams/:examId/overview', (req, res) => {
   const studentId = Number(req.params.studentId);
+  if (forbidOtherStudent(req, res, studentId)) return;
   const examId = Number(req.params.examId || getLatestExamId(db));
   const overview = getStudentOverview(db, studentId, examId);
   if (!overview) {
@@ -563,6 +807,7 @@ app.get('/api/students/:studentId/exams/:examId/overview', (req, res) => {
 
 app.get('/api/students/:studentId/trends', (req, res) => {
   const studentId = Number(req.params.studentId);
+  if (forbidOtherStudent(req, res, studentId)) return;
   const trends = getStudentTrends(db, studentId);
   if (trends.scoreTrend.length === 0) {
     res.status(404).json({ error: 'Trend not found' });
@@ -572,9 +817,11 @@ app.get('/api/students/:studentId/trends', (req, res) => {
 });
 
 app.get('/api/students/:studentId/exams/:examId/subjects/:subjectId', (req, res) => {
+  const studentId = Number(req.params.studentId);
+  if (forbidOtherStudent(req, res, studentId)) return;
   const analysis = getSubjectAnalysis(
     db,
-    Number(req.params.studentId),
+    studentId,
     Number(req.params.examId),
     Number(req.params.subjectId)
   );
@@ -586,9 +833,11 @@ app.get('/api/students/:studentId/exams/:examId/subjects/:subjectId', (req, res)
 });
 
 app.get('/api/students/:studentId/exams/:examId/subjects/:subjectId/knowledge', (req, res) => {
+  const studentId = Number(req.params.studentId);
+  if (forbidOtherStudent(req, res, studentId)) return;
   const analysis = getSubjectKnowledgeAnalysis(
     db,
-    Number(req.params.studentId),
+    studentId,
     Number(req.params.examId),
     Number(req.params.subjectId)
   );
@@ -600,7 +849,9 @@ app.get('/api/students/:studentId/exams/:examId/subjects/:subjectId/knowledge', 
 });
 
 app.get('/api/students/:studentId/subjects/:subjectId/knowledge-trends', (req, res) => {
-  const trends = getSubjectKnowledgeTrends(db, Number(req.params.studentId), Number(req.params.subjectId));
+  const studentId = Number(req.params.studentId);
+  if (forbidOtherStudent(req, res, studentId)) return;
+  const trends = getSubjectKnowledgeTrends(db, studentId, Number(req.params.subjectId));
   if (trends.length === 0) {
     res.status(404).json({ error: 'Subject knowledge trends not found' });
     return;

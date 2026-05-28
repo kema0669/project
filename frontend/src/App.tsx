@@ -1,19 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import {
+  approveStudent,
   confirmUpload,
+  fetchStudentApprovals,
   fetchStudentDiagnosis,
   fetchStudentResults,
+  fetchStudentStatus,
   fetchTeacherClasses,
   login,
   previewUpload,
+  registerStudent,
+  rejectStudent,
 } from './data/mock';
 import type {
+  AccountStatus,
   AuthUser,
   ConfirmImportResult,
   LoadingState,
+  StudentApproval,
   StudentDiagnosis,
+  StudentRegistrationResult,
   StudentResult,
+  StudentStatus,
   TeacherClass,
   UploadPreview,
 } from './types';
@@ -43,6 +52,12 @@ function sampleCsv(): string {
   return [headers, ...rows].map((row) => row.join(',')).join('\n');
 }
 
+function statusText(status: AccountStatus): string {
+  if (status === 'approved') return '已通过';
+  if (status === 'rejected') return '已拒绝';
+  return '待审核';
+}
+
 function MasteryRadar({ diagnosis }: { diagnosis: StudentDiagnosis }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
@@ -65,9 +80,7 @@ function MasteryRadar({ diagnosis }: { diagnosis: StudentDiagnosis }) {
         axisName: { color: '#475569', fontSize: 12 },
         splitLine: { lineStyle: { color: '#d6dee8' } },
         axisLine: { lineStyle: { color: '#d6dee8' } },
-        splitArea: {
-          areaStyle: { color: ['#ffffff', '#f8fafc'] },
-        },
+        splitArea: { areaStyle: { color: ['#ffffff', '#f8fafc'] } },
       },
       series: [
         {
@@ -93,12 +106,15 @@ function MasteryRadar({ diagnosis }: { diagnosis: StudentDiagnosis }) {
 }
 
 function LoginView({ onLogin }: { onLogin: (session: Session) => void }) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('teacher01');
   const [password, setPassword] = useState('password123');
+  const [studentNo, setStudentNo] = useState('S001');
   const [state, setState] = useState<LoadingState>('idle');
   const [message, setMessage] = useState('');
+  const [registration, setRegistration] = useState<StudentRegistrationResult | null>(null);
 
-  async function submit(event: React.FormEvent) {
+  async function submitLogin(event: React.FormEvent) {
     event.preventDefault();
     setState('loading');
     setMessage('');
@@ -112,16 +128,39 @@ function LoginView({ onLogin }: { onLogin: (session: Session) => void }) {
     }
   }
 
+  async function submitRegister(event: React.FormEvent) {
+    event.preventDefault();
+    setState('loading');
+    setMessage('');
+    setRegistration(null);
+    try {
+      const result = await registerStudent({ username, password, studentNo });
+      setRegistration(result);
+      setState('success');
+    } catch (error) {
+      setState('error');
+      setMessage(error instanceof Error ? error.message : '注册失败');
+    }
+  }
+
   return (
     <main className={styles.loginShell}>
       <section className={styles.loginPanel}>
         <div className={styles.brandBlock}>
           <span>AI Education MVP</span>
           <h1>智能化认知诊断平台</h1>
-          <p>教师上传固定成绩模板，系统完成校验、DINA 诊断，并让学生只查看自己的学习画像。</p>
+          <p>教师上传固定模板成绩，系统完成校验、DINA 诊断和可视化；学生注册后需经教师审核，才能查看自己的成绩与学习建议。</p>
         </div>
 
-        <form className={styles.loginForm} onSubmit={submit}>
+        <form className={styles.loginForm} onSubmit={mode === 'login' ? submitLogin : submitRegister}>
+          <div className={styles.segmented}>
+            <button type="button" className={mode === 'login' ? styles.activeSegment : ''} onClick={() => setMode('login')}>
+              登录
+            </button>
+            <button type="button" className={mode === 'register' ? styles.activeSegment : ''} onClick={() => setMode('register')}>
+              学生注册
+            </button>
+          </div>
           <label>
             账号
             <input value={username} onChange={(event) => setUsername(event.target.value)} />
@@ -130,17 +169,30 @@ function LoginView({ onLogin }: { onLogin: (session: Session) => void }) {
             密码
             <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
           </label>
-          <div className={styles.quickLogins}>
-            <button type="button" onClick={() => setUsername('teacher01')}>
-              教师
-            </button>
-            <button type="button" onClick={() => setUsername('stu001')}>
-              学生
-            </button>
-          </div>
+          {mode === 'register' && (
+            <label>
+              学号
+              <input value={studentNo} onChange={(event) => setStudentNo(event.target.value)} />
+            </label>
+          )}
+          {mode === 'login' && (
+            <div className={styles.quickLogins}>
+              <button type="button" onClick={() => setUsername('teacher01')}>
+                教师
+              </button>
+              <button type="button" onClick={() => setUsername('stu001')}>
+                学生
+              </button>
+            </div>
+          )}
           <button className={styles.primaryButton} type="submit" disabled={state === 'loading'}>
-            {state === 'loading' ? '登录中...' : '登录'}
+            {state === 'loading' ? '处理中...' : mode === 'login' ? '登录' : '提交注册'}
           </button>
+          {registration && (
+            <p className={styles.formSuccess}>
+              {registration.message} 当前学号 {registration.binding.studentNo} 为{statusText(registration.binding.status)}状态。
+            </p>
+          )}
           {message && <p className={styles.formError}>{message}</p>}
         </form>
       </section>
@@ -157,11 +209,103 @@ function AppHeader({ session, onLogout }: { session: Session; onLogout: () => vo
       </div>
       <div className={styles.userBox}>
         <strong>{session.user.displayName}</strong>
+        <span className={styles.statusPill}>{session.user.role === 'student' ? statusText(session.user.status) : '教师'}</span>
         <button type="button" onClick={onLogout}>
           退出
         </button>
       </div>
     </header>
+  );
+}
+
+function StudentApprovalPanel({ session }: { session: Session }) {
+  const [approvals, setApprovals] = useState<StudentApproval[]>([]);
+  const [state, setState] = useState<LoadingState>('idle');
+  const [message, setMessage] = useState('');
+
+  async function loadApprovals() {
+    setState('loading');
+    setMessage('');
+    try {
+      const rows = await fetchStudentApprovals(session.token);
+      setApprovals(rows);
+      setState('success');
+    } catch (error) {
+      setState('error');
+      setMessage(error instanceof Error ? error.message : '待审核学生加载失败');
+    }
+  }
+
+  useEffect(() => {
+    void loadApprovals();
+  }, [session.token]);
+
+  async function review(studentId: number, action: 'approve' | 'reject') {
+    setMessage('');
+    try {
+      const result =
+        action === 'approve'
+          ? await approveStudent(session.token, studentId)
+          : await rejectStudent(session.token, studentId);
+      setMessage(result.message);
+      await loadApprovals();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '审核操作失败');
+    }
+  }
+
+  return (
+    <section className={styles.panel}>
+      <div className={styles.previewHeader}>
+        <div className={styles.panelTitle}>
+          <span>Student Review</span>
+          <h2>学生注册审核</h2>
+        </div>
+        <button className={styles.secondaryButton} type="button" onClick={loadApprovals} disabled={state === 'loading'}>
+          刷新
+        </button>
+      </div>
+      {approvals.length === 0 ? (
+        <p className={styles.mutedText}>暂无待审核学生。</p>
+      ) : (
+        <div className={styles.tableWrap}>
+          <table>
+            <thead>
+              <tr>
+                <th>账号</th>
+                <th>学号</th>
+                <th>姓名</th>
+                <th>班级</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {approvals.map((item) => (
+                <tr key={item.userId}>
+                  <td>{item.username}</td>
+                  <td>{item.studentNo}</td>
+                  <td>{item.studentName}</td>
+                  <td>{item.className}</td>
+                  <td>{statusText(item.status)}</td>
+                  <td>
+                    <div className={styles.rowActions}>
+                      <button type="button" onClick={() => review(item.studentId, 'approve')}>
+                        通过
+                      </button>
+                      <button type="button" onClick={() => review(item.studentId, 'reject')}>
+                        拒绝
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {message && <p className={message.includes('失败') ? styles.formError : styles.formSuccess}>{message}</p>}
+    </section>
   );
 }
 
@@ -234,6 +378,8 @@ function TeacherDashboard({ session }: { session: Session }) {
           <strong>20</strong>
         </div>
       </section>
+
+      <StudentApprovalPanel session={session} />
 
       <section className={styles.twoColumn}>
         <form className={styles.panel} onSubmit={submitPreview}>
@@ -338,38 +484,79 @@ function TeacherDashboard({ session }: { session: Session }) {
   );
 }
 
+function StudentStatusPanel({ status }: { status: StudentStatus }) {
+  const title = status.status === 'rejected' ? '注册申请已被拒绝' : '注册申请待审核';
+  const body =
+    status.status === 'rejected'
+      ? '请联系任课老师确认学号信息后重新处理。'
+      : '老师审核通过后，你将自动进入成绩与诊断结果页面。';
+
+  return (
+    <main className={styles.workspace}>
+      <section className={styles.statusPanel}>
+        <span className={styles.statusPill}>{statusText(status.status)}</span>
+        <h2>{title}</h2>
+        <p>{body}</p>
+        {status.student && (
+          <div className={styles.statusGrid}>
+            <div>
+              <span>学号</span>
+              <strong>{status.student.studentNo}</strong>
+            </div>
+            <div>
+              <span>姓名</span>
+              <strong>{status.student.name}</strong>
+            </div>
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
+
 function StudentDashboard({ session }: { session: Session }) {
+  const [studentStatus, setStudentStatus] = useState<StudentStatus | null>(null);
   const [results, setResults] = useState<StudentResult[]>([]);
   const [selectedExamId, setSelectedExamId] = useState(0);
   const [diagnosis, setDiagnosis] = useState<StudentDiagnosis | null>(null);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    fetchStudentResults(session.token)
+    fetchStudentStatus(session.token)
+      .then((status) => {
+        setStudentStatus(status);
+        if (!status.canViewResults) return [];
+        return fetchStudentResults(session.token);
+      })
       .then((rows) => {
+        if (!Array.isArray(rows)) return;
         setResults(rows);
         if (rows[0]) setSelectedExamId(rows[0].examId);
       })
-      .catch((error) => setMessage(error instanceof Error ? error.message : '成绩加载失败'));
+      .catch((error) => setMessage(error instanceof Error ? error.message : '学生信息加载失败'));
   }, [session.token]);
 
   useEffect(() => {
-    if (!selectedExamId) return;
+    if (!selectedExamId || studentStatus?.status !== 'approved') return;
     fetchStudentDiagnosis(session.token, selectedExamId)
       .then(setDiagnosis)
       .catch((error) => setMessage(error instanceof Error ? error.message : '诊断加载失败'));
-  }, [selectedExamId, session.token]);
+  }, [selectedExamId, session.token, studentStatus?.status]);
 
   const selectedResult = useMemo(
     () => results.find((item) => item.examId === selectedExamId),
     [results, selectedExamId]
   );
 
+  if (studentStatus && studentStatus.status !== 'approved') {
+    return <StudentStatusPanel status={studentStatus} />;
+  }
+
   return (
     <main className={styles.workspace}>
       {results.length === 0 && (
         <section className={styles.emptyPanel}>
-          暂无诊断结果。请先使用教师账号上传并确认一份固定模板 Excel。
+          暂无诊断结果。请先由教师上传并确认一份固定模板 Excel。
         </section>
       )}
 
@@ -388,7 +575,7 @@ function StudentDashboard({ session }: { session: Session }) {
             </label>
             {selectedResult && (
               <div>
-                <span>答对</span>
+                <span>得分</span>
                 <strong>
                   {selectedResult.score}/{selectedResult.total}
                 </strong>

@@ -1,48 +1,38 @@
-# SDD Step 1: REST API Contract
+# REST API Contract
 
-## API Principles
+## Principles
 
 - Base path: `/api`
-- Authentication: JWT bearer token.
-- Roles: `teacher` and `student`.
-- Students can only read their own result data.
-- Teachers can access classes, uploads, and diagnosis data for classes they own.
-- Preview upload does not write `responses` or `diagnosis_results`.
-- Confirm upload writes responses and triggers diagnosis generation.
+- Authentication: bearer token returned by `POST /api/auth/login`
+- Roles: `teacher` and `student`
+- Student result APIs require `users.status = 'approved'`
+- Teachers can only review students in their own classes
+- Upload preview does not write score/diagnosis records
+- Upload confirm writes responses and generates diagnosis
 
-## Shared Response Shapes
-
-### Success
-
-```json
-{
-  "data": {}
-}
-```
-
-### Error
+## Error Shape
 
 ```json
 {
   "error": {
     "code": "VALIDATION_ERROR",
-    "message": "Excel contains invalid answer values.",
+    "message": "未找到该学号，请确认老师已上传成绩。",
     "details": []
   }
 }
 ```
 
-Common error codes:
+Common codes:
 
 | Code | Meaning |
 | --- | --- |
 | `UNAUTHORIZED` | Missing or invalid token. |
-| `FORBIDDEN` | Role or ownership check failed. |
-| `VALIDATION_ERROR` | Request body or Excel rows failed validation. |
+| `FORBIDDEN` | Role, status, or ownership check failed. |
+| `VALIDATION_ERROR` | Request body or uploaded rows failed validation. |
 | `NOT_FOUND` | Resource does not exist or is not visible to the user. |
-| `CONFLICT` | Duplicate import or conflicting data. |
+| `CONFLICT` | Username or `student_no` binding conflict. |
 
-## Auth
+## Auth APIs
 
 ### `POST /api/auth/login`
 
@@ -65,32 +55,111 @@ Response:
       "id": 1,
       "username": "teacher01",
       "role": "teacher",
+      "status": "approved",
       "displayName": "Teacher Demo"
     }
   }
 }
 ```
 
-## Teacher APIs
+### `POST /api/auth/register-student`
 
-### `GET /api/teacher/classes`
+Student self-registration. The backend matches `student_no` against existing student records imported or seeded by teachers.
 
-Returns classes owned by the current teacher.
+Request:
+
+```json
+{
+  "username": "new_student",
+  "password": "password123",
+  "student_no": "S001"
+}
+```
 
 Response:
 
 ```json
 {
-  "data": [
-    {
-      "id": 1,
-      "name": "Class A",
-      "studentCount": 10,
-      "latestExamId": 1
-    }
-  ]
+  "data": {
+    "user": {
+      "id": 21,
+      "username": "new_student",
+      "role": "student",
+      "status": "pending"
+    },
+    "binding": {
+      "studentId": 1,
+      "studentNo": "S001",
+      "studentName": "张三",
+      "status": "pending"
+    },
+    "message": "注册成功，等待老师审核。"
+  }
 }
 ```
+
+Rules:
+
+- If `student_no` does not exist, return `VALIDATION_ERROR`: `未找到该学号，请确认老师已上传成绩。`
+- If `student_no` already has `students.user_id`, return `CONFLICT`: `该学号已绑定账号。`
+- If `username` already exists, return `CONFLICT`: `用户名已存在。`
+- The endpoint is public but can only create `student` users with `status = 'pending'`.
+
+Compatibility alias:
+
+- `POST /api/auth/register/student`
+
+## Student APIs
+
+### `GET /api/student/me/status`
+
+Returns the current student's binding and review status. This endpoint is available to `pending`, `approved`, and `rejected` students.
+
+Response:
+
+```json
+{
+  "data": {
+    "userId": 21,
+    "username": "new_student",
+    "status": "pending",
+    "student": {
+      "id": 1,
+      "studentNo": "S001",
+      "name": "张三",
+      "classId": 1
+    },
+    "canViewResults": false
+  }
+}
+```
+
+Compatibility alias:
+
+- `GET /api/student/me/binding-status`
+
+### `GET /api/student/me/results`
+
+Returns the current approved student's own exam score list.
+
+Access rules:
+
+- Requires `student` role.
+- Requires `users.status = 'approved'`.
+- `pending` or `rejected` students receive `FORBIDDEN`.
+- The backend resolves `student_id` from the token-bound `students.user_id`.
+
+### `GET /api/student/me/diagnosis?examId=:examId`
+
+Returns the current approved student's score, mastery list, weak points, recommendation, and knowledge graph for one exam.
+
+Access rules are the same as `/api/student/me/results`.
+
+## Teacher APIs
+
+### `GET /api/teacher/classes`
+
+Returns classes owned by the current teacher.
 
 ### `POST /api/teacher/uploads/preview`
 
@@ -107,125 +176,29 @@ Fields:
 Behavior:
 
 - Parse the first worksheet.
-- Validate headers and row values.
+- Validate required headers and row values.
 - Store upload metadata and preview JSON only.
-- Do not write `responses`.
-- Do not run diagnosis.
-
-Response:
-
-```json
-{
-  "data": {
-    "uploadId": 12,
-    "status": "previewed",
-    "summary": {
-      "rowCount": 10,
-      "validRowCount": 9,
-      "errorRowCount": 1,
-      "questionCount": 20
-    },
-    "rows": [
-      {
-        "rowNumber": 2,
-        "studentNo": "S001",
-        "studentName": "Alice",
-        "answers": {
-          "q1": 1,
-          "q2": 0
-        },
-        "errors": []
-      }
-    ],
-    "errors": [
-      {
-        "rowNumber": 5,
-        "field": "q7",
-        "message": "Answer must be 0 or 1."
-      }
-    ]
-  }
-}
-```
+- Do not write responses or diagnosis.
 
 ### `POST /api/teacher/uploads/:uploadId/confirm`
 
-Confirms a valid preview and imports it.
-
-Request:
-
-```json
-{
-  "runDiagnosis": true
-}
-```
-
-Response:
-
-```json
-{
-  "data": {
-    "uploadId": 12,
-    "examId": 3,
-    "status": "confirmed",
-    "importedResponses": 200,
-    "diagnosedStudents": 10
-  }
-}
-```
+Confirms a valid preview, writes responses, and runs diagnosis.
 
 Rules:
 
-- Reject confirmation if preview has validation errors.
-- Reject confirmation if the upload does not belong to the current teacher.
-- Upsert or replace responses only for the target exam and upload policy chosen by implementation.
-- Generate `diagnosis_results` and `recommendations` after import.
+- Reject if preview has validation errors.
+- Reject if the upload does not belong to the current teacher.
+- Generate diagnosis and recommendations after import.
 
-### `GET /api/teacher/classes/:classId/diagnosis`
+### `GET /api/teacher/student-approvals`
 
-Returns class-level diagnosis overview.
+Returns pending student account binding applications for classes owned by the current teacher.
 
 Query:
 
 | Name | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `examId` | number | yes | Exam id. |
-
-Response:
-
-```json
-{
-  "data": {
-    "classId": 1,
-    "examId": 3,
-    "knowledgePoints": [
-      {
-        "id": 1,
-        "code": "kp_number",
-        "name": "Number Sense",
-        "averageMastery": 0.76,
-        "weakStudentCount": 2
-      }
-    ],
-    "students": [
-      {
-        "studentId": 1,
-        "studentNo": "S001",
-        "name": "Alice",
-        "score": 16,
-        "total": 20,
-        "averageMastery": 0.81
-      }
-    ]
-  }
-}
-```
-
-## Student APIs
-
-### `GET /api/student/me/results`
-
-Returns the current student's own exam score list.
+| `status` | string | no | Default `pending`; allowed: `pending`, `approved`, `rejected`. |
 
 Response:
 
@@ -233,120 +206,78 @@ Response:
 {
   "data": [
     {
-      "examId": 3,
-      "examName": "DINA Diagnostic Quiz",
-      "score": 16,
-      "total": 20,
-      "correctRate": 0.8,
+      "userId": 21,
+      "username": "new_student",
+      "status": "pending",
+      "studentId": 1,
+      "studentNo": "S001",
+      "studentName": "张三",
+      "classId": 1,
+      "className": "Class A",
       "createdAt": "2026-05-28T08:00:00.000Z"
     }
   ]
 }
 ```
 
-### `GET /api/student/me/diagnosis`
+Compatibility alias:
 
-Query:
+- `GET /api/teacher/student-registrations`
 
-| Name | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `examId` | number | yes | Exam id. |
+### `POST /api/teacher/student-approvals/:studentId/approve`
+
+Approves a pending student binding application.
 
 Response:
 
 ```json
 {
   "data": {
-    "examId": 3,
-    "student": {
-      "id": 1,
-      "studentNo": "S001",
-      "name": "Alice"
-    },
-    "score": {
-      "correct": 16,
-      "total": 20,
-      "correctRate": 0.8
-    },
-    "mastery": [
-      {
-        "knowledgePointId": 1,
-        "code": "kp_number",
-        "name": "Number Sense",
-        "masteryProbability": 0.86,
-        "level": "strong",
-        "evidenceCorrect": 5,
-        "evidenceTotal": 6
-      }
-    ],
-    "weakPoints": [
-      {
-        "knowledgePointId": 3,
-        "name": "Equation Basics",
-        "masteryProbability": 0.42
-      }
-    ],
-    "recommendation": "Prioritize Equation Basics and review related practice questions first.",
-    "knowledgeGraph": {
-      "nodes": [
-        {
-          "id": 1,
-          "name": "Number Sense",
-          "masteryProbability": 0.86
-        }
-      ],
-      "edges": [
-        {
-          "from": 1,
-          "to": 2,
-          "type": "prerequisite"
-        }
-      ]
-    }
+    "userId": 21,
+    "studentId": 1,
+    "status": "approved",
+    "message": "学生账号已审核通过。"
   }
 }
 ```
 
-## Diagnosis Module Contract
+### `POST /api/teacher/student-approvals/:studentId/reject`
 
-The backend should expose this internal function shape, even if file names differ:
+Rejects a pending student binding application.
 
-```ts
-type DinaInput = {
-  studentId: number;
-  examId: number;
-  qMatrix: Array<{
-    questionId: number;
-    knowledgePointId: number;
-    weight: 0 | 1;
-  }>;
-  responses: Array<{
-    questionId: number;
-    isCorrect: 0 | 1;
-  }>;
-  knowledgePoints: Array<{
-    id: number;
-    code: string;
-    name: string;
-  }>;
-};
+Request:
 
-type DinaOutput = Array<{
-  studentId: number;
-  examId: number;
-  knowledgePointId: number;
-  masteryProbability: number;
-  evidenceCorrect: number;
-  evidenceTotal: number;
-}>;
+```json
+{
+  "reason": "学号信息需重新确认"
+}
 ```
 
-For the MVP, a basic DINA-style implementation can combine:
+Response:
 
-- question correctness,
-- related Q matrix rows,
-- slip parameter default `0.2`,
-- guess parameter default `0.2`,
-- clamped mastery probability from `0.01` to `0.99`.
+```json
+{
+  "data": {
+    "userId": 21,
+    "studentId": 1,
+    "status": "rejected",
+    "message": "学生账号已拒绝。"
+  }
+}
+```
 
-The exact formula must be documented in `docs/algorithm.md` during the implementation phase.
+Compatibility aliases:
+
+- `POST /api/teacher/student-registrations/:userId/approve`
+- `POST /api/teacher/student-registrations/:userId/reject`
+
+Review rules:
+
+- Requires `teacher` role.
+- Target application must belong to a class owned by the current teacher.
+- Only `pending` accounts can be approved or rejected.
+- Non-teacher users receive `FORBIDDEN`.
+
+## Diagnosis Contract
+
+The DINA module accepts Q matrix rows and student responses, then outputs mastery probabilities and evidence counts per knowledge point. The exact implementation is intentionally lightweight for the MVP and is covered by backend tests.

@@ -239,6 +239,7 @@ export function initDatabase(dbPath: string): Database.Database {
   addColumnIfMissing(db, 'students', 'class_id', 'INTEGER');
   addColumnIfMissing(db, 'students', 'student_no', 'TEXT');
   addColumnIfMissing(db, 'knowledge_points', 'sort_order', 'INTEGER');
+  addColumnIfMissing(db, 'users', 'status', "TEXT NOT NULL DEFAULT 'approved'");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -246,6 +247,7 @@ export function initDatabase(dbPath: string): Database.Database {
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK(role IN ('teacher', 'student')),
+      status TEXT NOT NULL DEFAULT 'approved' CHECK(status IN ('pending', 'approved', 'rejected')),
       display_name TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -358,6 +360,10 @@ export function initDatabase(dbPath: string): Database.Database {
       FOREIGN KEY (exam_id) REFERENCES exams(id),
       FOREIGN KEY (student_id) REFERENCES students(id)
     );
+
+    CREATE INDEX IF NOT EXISTS idx_users_role_status ON users(role, status);
+    CREATE INDEX IF NOT EXISTS idx_students_user_id ON students(user_id);
+    CREATE INDEX IF NOT EXISTS idx_students_student_no ON students(student_no);
   `);
 
   return db;
