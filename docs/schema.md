@@ -1,186 +1,257 @@
-# SDD 阶段：数据库 Schema 与接口契约设计
+# SDD Step 1: SQLite Schema Design
 
-## 1. 设计思路（Schema-Driven）
+## MVP Scope
 
-本阶段遵循 **Spec/Schema-Driven Development**，先定义数据结构与接口契约，作为后续前端（DDD）与算法（TDD）的"锚点"。
+This schema supports the resume-oriented MVP only:
 
-### 核心原则
-- **单一职责**：每张表只负责一个领域概念（学生、知识点、题目、作答、图谱关系）
-- **可追踪性**：所有算法输入（Q矩阵、X矩阵）均可从表中直接导出
-- **可扩展性**：Schema 预留了 `weight`、`response_time` 等字段，便于后续算法优化
+```text
+Teacher login
+-> upload fixed Excel score file
+-> preview and validate rows
+-> confirm import
+-> run DINA diagnosis
+-> student login
+-> student views own score, mastery profile, weak points, recommendations
+```
 
----
+Out of scope for this phase: OCR, Word/PDF parsing, auto question generation, multi-tenant school management, complex admin console, and real LLM calls.
 
-## 2. ER 图
+## Core Entities
+
+| Entity | Purpose |
+| --- | --- |
+| `users` | Login accounts for teachers and students. |
+| `classes` | Basic class grouping owned by a teacher. |
+| `students` | Student profile linked to a login account and class. |
+| `knowledge_points` | Five knowledge points used by the Q matrix and diagnosis. |
+| `knowledge_relations` | Simple prerequisite graph between knowledge points. |
+| `exams` | One score import batch, such as "Diagnostic Quiz 1". |
+| `questions` | Twenty fixed questions for the MVP exam template. |
+| `q_matrix` | Question-to-knowledge mapping. This is the Q matrix. |
+| `uploads` | Teacher upload batch metadata and status. |
+| `responses` | Student answer records. This is the X matrix source. |
+| `diagnosis_results` | DINA output per student and knowledge point. |
+| `recommendations` | Rule-based learning suggestions generated from diagnosis results. |
+
+## ER Diagram
 
 ```mermaid
 erDiagram
-    KNOWLEDGE_POINTS {
-        INTEGER id PK "知识点ID"
-        TEXT code UK "知识点编码"
-        TEXT name "知识点名称"
-        TEXT description "知识点描述"
-        INTEGER level "认知层级"
-    }
-
-    KNOWLEDGE_RELATIONS {
-        INTEGER id PK "关系ID"
-        INTEGER from_id FK "前序知识点"
-        INTEGER to_id FK "后继知识点"
-        TEXT relation_type "关系类型: prerequisite"
-    }
-
-    QUESTIONS {
-        INTEGER id PK "题目ID"
-        TEXT content "题目内容"
-        TEXT type "题型: single_choice"
-        REAL difficulty "题目难度(0-1)"
-    }
-
-    QUESTION_KNOWLEDGE_MAP {
-        INTEGER id PK "映射ID"
-        INTEGER question_id FK "题目ID"
-        INTEGER knowledge_point_id FK "知识点ID"
-        INTEGER weight "是否考察: 0或1"
-    }
-
-    STUDENTS {
-        INTEGER id PK "学生ID"
-        TEXT name "学生姓名"
-    }
-
-    RESPONSES {
-        INTEGER id PK "作答ID"
-        INTEGER student_id FK "学生ID"
-        INTEGER question_id FK "题目ID"
-        INTEGER is_correct "是否答对: 0或1"
-        INTEGER response_time "作答耗时(ms)"
-        TEXT created_at "作答时间"
-    }
-
+    USERS ||--o| STUDENTS : "student account"
+    USERS ||--o{ CLASSES : "teacher owns"
+    CLASSES ||--o{ STUDENTS : "contains"
+    CLASSES ||--o{ EXAMS : "has"
+    EXAMS ||--o{ QUESTIONS : "defines"
+    EXAMS ||--o{ UPLOADS : "imports"
+    STUDENTS ||--o{ RESPONSES : "answers"
+    QUESTIONS ||--o{ RESPONSES : "answered by"
+    QUESTIONS ||--o{ Q_MATRIX : "maps"
+    KNOWLEDGE_POINTS ||--o{ Q_MATRIX : "tested by"
     KNOWLEDGE_POINTS ||--o{ KNOWLEDGE_RELATIONS : "from"
     KNOWLEDGE_POINTS ||--o{ KNOWLEDGE_RELATIONS : "to"
-    QUESTIONS ||--o{ QUESTION_KNOWLEDGE_MAP : "maps"
-    KNOWLEDGE_POINTS ||--o{ QUESTION_KNOWLEDGE_MAP : "mapped_by"
-    STUDENTS ||--o{ RESPONSES : "answers"
-    QUESTIONS ||--o{ RESPONSES : "answered_in"
+    STUDENTS ||--o{ DIAGNOSIS_RESULTS : "has"
+    KNOWLEDGE_POINTS ||--o{ DIAGNOSIS_RESULTS : "diagnosed"
+    STUDENTS ||--o{ RECOMMENDATIONS : "receives"
+    EXAMS ||--o{ DIAGNOSIS_RESULTS : "produces"
 ```
 
----
+## Table Definitions
 
-## 3. 表结构说明
+### `users`
 
-### 3.1 knowledge_points（知识点表）
-存储5个核心知识点，用于构建知识图谱节点。
+Stores authentication identities.
 
-| 字段 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PK | 自增主键 |
-| code | TEXT | UK, NOT NULL | 编码，如 `addition_basic` |
-| name | TEXT | NOT NULL | 名称，如 "加法基础" |
-| description | TEXT | | 描述 |
-| level | INTEGER | NOT NULL DEFAULT 1 | 认知层级（1=基础，2=进阶，3=综合） |
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Auto increment. |
+| `username` | TEXT | UNIQUE, NOT NULL | Login name, such as `teacher01` or `stu001`. |
+| `password_hash` | TEXT | NOT NULL | Hashed password. Never store plain text. |
+| `role` | TEXT | NOT NULL | `teacher` or `student`. |
+| `display_name` | TEXT | NOT NULL | Name shown in UI. |
+| `created_at` | TEXT | NOT NULL | ISO datetime. |
 
-### 3.2 knowledge_relations（知识图谱关系表）
-存储知识点之间的前序/后继关系，支持知识图谱可视化。
+### `classes`
 
-| 字段 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PK | 自增主键 |
-| from_id | INTEGER | FK, NOT NULL | 前序知识点ID |
-| to_id | INTEGER | FK, NOT NULL | 后继知识点ID |
-| relation_type | TEXT | NOT NULL DEFAULT 'prerequisite' | 关系类型 |
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Auto increment. |
+| `name` | TEXT | NOT NULL | Example: `Class A`. |
+| `teacher_user_id` | INTEGER | FK -> users.id, NOT NULL | Owner teacher. |
+| `created_at` | TEXT | NOT NULL | ISO datetime. |
 
-### 3.3 questions（题目表）
-存储20道测试题。
+### `students`
 
-| 字段 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PK | 自增主键 |
-| content | TEXT | NOT NULL | 题目内容 |
-| type | TEXT | NOT NULL DEFAULT 'single_choice' | 题型 |
-| difficulty | REAL | NOT NULL DEFAULT 0.5 | 难度系数 0-1 |
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Internal student id. |
+| `user_id` | INTEGER | FK -> users.id, UNIQUE, NOT NULL | Student login account. |
+| `class_id` | INTEGER | FK -> classes.id, NOT NULL | Student class. |
+| `student_no` | TEXT | UNIQUE, NOT NULL | External id in Excel, such as `S001`. |
+| `name` | TEXT | NOT NULL | Student name. |
 
-### 3.4 question_knowledge_map（Q矩阵表）
-**核心表**。存储题目与知识点的关联（Q矩阵），`weight=1` 表示该题考察该知识点。
+### `knowledge_points`
 
-| 字段 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PK | 自增主键 |
-| question_id | INTEGER | FK, NOT NULL | 题目ID |
-| knowledge_point_id | INTEGER | FK, NOT NULL | 知识点ID |
-| weight | INTEGER | NOT NULL DEFAULT 1 | 关联权重（0或1） |
+The MVP uses exactly five seeded knowledge points.
 
-**唯一约束**：`(question_id, knowledge_point_id)`
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Auto increment. |
+| `code` | TEXT | UNIQUE, NOT NULL | Stable code, such as `kp_fraction`. |
+| `name` | TEXT | NOT NULL | Display name. |
+| `description` | TEXT |  | Short explanation. |
+| `sort_order` | INTEGER | NOT NULL | UI and radar chart order. |
 
-### 3.5 students（学生表）
-存储至少10名学生的基本信息。
+### `knowledge_relations`
 
-| 字段 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PK | 自增主键 |
-| name | TEXT | NOT NULL | 学生姓名 |
+Simple knowledge graph for prerequisite/successor display.
 
-### 3.6 responses（作答记录表）
-**核心表**。存储X矩阵数据，即学生的作答情况。
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Auto increment. |
+| `from_knowledge_point_id` | INTEGER | FK -> knowledge_points.id, NOT NULL | Prerequisite node. |
+| `to_knowledge_point_id` | INTEGER | FK -> knowledge_points.id, NOT NULL | Successor node. |
+| `relation_type` | TEXT | NOT NULL | Default `prerequisite`. |
 
-| 字段 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PK | 自增主键 |
-| student_id | INTEGER | FK, NOT NULL | 学生ID |
-| question_id | INTEGER | FK, NOT NULL | 题目ID |
-| is_correct | INTEGER | NOT NULL | 是否答对（0=错，1=对） |
-| response_time | INTEGER | | 作答耗时（毫秒） |
-| created_at | TEXT | NOT NULL DEFAULT CURRENT_TIMESTAMP | 作答时间 |
+Unique constraint: `(from_knowledge_point_id, to_knowledge_point_id, relation_type)`.
 
-**唯一约束**：`(student_id, question_id)` —— 假设每名学生每道题只作答一次
+### `exams`
 
----
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Auto increment. |
+| `class_id` | INTEGER | FK -> classes.id, NOT NULL | Exam class. |
+| `name` | TEXT | NOT NULL | Example: `DINA Diagnostic Quiz`. |
+| `question_count` | INTEGER | NOT NULL | Must be `20` for the fixed template MVP. |
+| `created_by_user_id` | INTEGER | FK -> users.id, NOT NULL | Teacher who created/imported it. |
+| `created_at` | TEXT | NOT NULL | ISO datetime. |
 
-## 4. Q矩阵与X矩阵的导出方式
+### `questions`
 
-### Q矩阵（题目 × 知识点）
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Auto increment. |
+| `exam_id` | INTEGER | FK -> exams.id, NOT NULL | Exam owner. |
+| `question_no` | INTEGER | NOT NULL | 1 to 20. |
+| `content` | TEXT |  | Optional placeholder text. |
+| `difficulty` | REAL | NOT NULL | 0 to 1, seeded default 0.5. |
+
+Unique constraint: `(exam_id, question_no)`.
+
+### `q_matrix`
+
+Defines which knowledge points each question tests.
+
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Auto increment. |
+| `question_id` | INTEGER | FK -> questions.id, NOT NULL | Question. |
+| `knowledge_point_id` | INTEGER | FK -> knowledge_points.id, NOT NULL | Knowledge point. |
+| `weight` | INTEGER | NOT NULL | `1` means tested. MVP can treat any row as weight 1. |
+
+Unique constraint: `(question_id, knowledge_point_id)`.
+
+### `uploads`
+
+Tracks teacher Excel import batches.
+
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Auto increment. |
+| `teacher_user_id` | INTEGER | FK -> users.id, NOT NULL | Uploader. |
+| `class_id` | INTEGER | FK -> classes.id, NOT NULL | Target class. |
+| `exam_id` | INTEGER | FK -> exams.id | Set after confirm if created during import. |
+| `original_filename` | TEXT | NOT NULL | Uploaded file name. |
+| `status` | TEXT | NOT NULL | `previewed`, `confirmed`, or `rejected`. |
+| `row_count` | INTEGER | NOT NULL | Parsed data rows. |
+| `error_count` | INTEGER | NOT NULL | Validation error count. |
+| `preview_payload_json` | TEXT | NOT NULL | Parsed preview rows and errors before confirm. |
+| `created_at` | TEXT | NOT NULL | ISO datetime. |
+| `confirmed_at` | TEXT |  | ISO datetime after confirmation. |
+
+### `responses`
+
+Stores imported X matrix values.
+
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Auto increment. |
+| `exam_id` | INTEGER | FK -> exams.id, NOT NULL | Exam. |
+| `student_id` | INTEGER | FK -> students.id, NOT NULL | Student. |
+| `question_id` | INTEGER | FK -> questions.id, NOT NULL | Question. |
+| `is_correct` | INTEGER | NOT NULL | `0` or `1`. |
+| `upload_id` | INTEGER | FK -> uploads.id, NOT NULL | Import batch. |
+| `created_at` | TEXT | NOT NULL | ISO datetime. |
+
+Unique constraint: `(exam_id, student_id, question_id)`.
+
+### `diagnosis_results`
+
+Stores one DINA diagnosis row per student, exam, and knowledge point.
+
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Auto increment. |
+| `exam_id` | INTEGER | FK -> exams.id, NOT NULL | Exam. |
+| `student_id` | INTEGER | FK -> students.id, NOT NULL | Student. |
+| `knowledge_point_id` | INTEGER | FK -> knowledge_points.id, NOT NULL | Knowledge point. |
+| `mastery_probability` | REAL | NOT NULL | 0 to 1. |
+| `evidence_correct` | INTEGER | NOT NULL | Correct answers on related questions. |
+| `evidence_total` | INTEGER | NOT NULL | Related question count. |
+| `model_version` | TEXT | NOT NULL | Example: `dina-basic-v1`. |
+| `created_at` | TEXT | NOT NULL | ISO datetime. |
+
+Unique constraint: `(exam_id, student_id, knowledge_point_id, model_version)`.
+
+### `recommendations`
+
+| Column | Type | Constraint | Notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | PK | Auto increment. |
+| `exam_id` | INTEGER | FK -> exams.id, NOT NULL | Exam. |
+| `student_id` | INTEGER | FK -> students.id, NOT NULL | Student. |
+| `content` | TEXT | NOT NULL | Rule-based personalized suggestion. |
+| `source` | TEXT | NOT NULL | `rule`. Future value may be `llm`. |
+| `created_at` | TEXT | NOT NULL | ISO datetime. |
+
+## Q Matrix Export
+
 ```sql
-SELECT q.id AS question_id,
-       kp.id AS knowledge_point_id,
-       COALESCE(qkm.weight, 0) AS weight
+SELECT
+  q.question_no,
+  kp.code AS knowledge_code,
+  CASE WHEN qm.id IS NULL THEN 0 ELSE qm.weight END AS weight
 FROM questions q
 CROSS JOIN knowledge_points kp
-LEFT JOIN question_knowledge_map qkm
-  ON qkm.question_id = q.id AND qkm.knowledge_point_id = kp.id
-ORDER BY q.id, kp.id;
+LEFT JOIN q_matrix qm
+  ON qm.question_id = q.id
+ AND qm.knowledge_point_id = kp.id
+WHERE q.exam_id = ?
+ORDER BY q.question_no, kp.sort_order;
 ```
 
-### X矩阵（学生 × 题目）
+## X Matrix Export
+
 ```sql
-SELECT s.id AS student_id,
-       q.id AS question_id,
-       COALESCE(r.is_correct, 0) AS is_correct
-FROM students s
-CROSS JOIN questions q
-LEFT JOIN responses r
-  ON r.student_id = s.id AND r.question_id = q.id
-ORDER BY s.id, q.id;
+SELECT
+  s.student_no,
+  q.question_no,
+  r.is_correct
+FROM responses r
+JOIN students s ON s.id = r.student_id
+JOIN questions q ON q.id = r.question_id
+WHERE r.exam_id = ?
+ORDER BY s.student_no, q.question_no;
 ```
 
----
+## Seed Data Contract
 
-## 5. 接口契约（API Spec）
+The implementation should seed:
 
-详见 `src/types.ts`。核心接口包括：
+- 1 teacher account: `teacher01`
+- 10 student accounts: `stu001` to `stu010`
+- 1 class: `Class A`
+- 5 knowledge points
+- 1 default exam with 20 questions
+- A fixed 20 x 5 Q matrix
 
-- `KnowledgePoint` / `KnowledgeRelation`：知识图谱数据结构
-- `Question` / `QuestionKnowledgeMap`：题目与Q矩阵数据结构
-- `Student` / `Response`：学生与X矩阵数据结构
-- `DiagnosisResult`：算法层输出（学生各知识点的掌握概率）
-- `DiagnosisRequest` / `DiagnosisResponse`：API 请求/响应契约
-
----
-
-## 6. 与后续阶段的衔接
-
-| 阶段 | 如何使用本阶段产物 |
-|------|-------------------|
-| **DDD（前端）** | 基于 `knowledge_points` + `knowledge_relations` 绘制知识图谱；基于 `DiagnosisResult` 绘制雷达图 |
-| **TDD（算法）** | 从 `question_knowledge_map` 读取Q矩阵，从 `responses` 读取X矩阵，输入DINA模型计算掌握概率 |
-| **E2E（整合）** | 通过 `DiagnosisRequest` / `DiagnosisResponse` 契约打通前后端 |
+Passwords may use demo defaults in development, but must still be hashed in the database.

@@ -1,85 +1,99 @@
-# 智能化认知诊断与多学科成绩分析 MVP
+# 智能化认知诊断平台 MVP
 
-本项目是一个面向学校真实考试场景的轻量级教育数据分析系统。项目已从早期“单一数学 Q1-Q20 认知诊断 Demo”升级为“多年级、多学科、多考试批次、单科题目分析、考点掌握分析、AI 辅助试卷解析草稿”的完整 MVP。
-
-## 项目定位
-
-系统用于帮助老师和教研人员查看学生在不同考试中的成绩变化、排名变化、单科题目得分情况和考点掌握情况。
-
-当前版本重点不是自动阅卷，而是构建一个清晰、可解释、可扩展的数据分析链路：
+这是一个面向简历展示和实习面试讲解的全栈教育诊断项目。项目目标不是做大而全的学校系统，而是完成一个清晰、可运行、可解释的产品闭环：
 
 ```text
-学生 / 年级 / 班级
--> 考试批次
--> 学科试卷
--> 每题得分
--> 单科成绩
--> 排名趋势
--> 考点掌握
--> AI 辅助试卷解析草稿
+教师登录
+-> 上传固定模板 Excel 成绩
+-> 系统预览并校验数据
+-> 教师确认入库
+-> 后端运行 DINA 诊断逻辑
+-> 学生登录
+-> 学生只查看自己的成绩、知识点掌握情况和学习建议
 ```
 
-## 核心能力
+## MVP 范围
 
-- 支持语文、数学、英语、物理、化学、生物、政治、历史、地理 9 门学科
-- 支持不同年级学习不同科目
-- 支持多次考试批次
-- 支持学生所学科目的成绩雷达图
-- 支持总分趋势、班级排名趋势、年级排名趋势
-- 支持各科成绩趋势
-- 支持单科题目分析
-- 支持每题满分、得分、得分率、低分题列表
-- 支持单科考点掌握地图
-- 支持考点掌握趋势和薄弱考点排序
-- 支持 AI 辅助试卷解析草稿流程
-- 支持老师确认后再进入正式入库流程
-- 支持一键启动
+必须做：
+
+- 教师/学生角色登录
+- 基于角色的权限控制
+- 学生只能访问自己的成绩和诊断结果
+- 教师上传固定模板 `.xlsx` 成绩文件
+- 上传预览、错误行提示、确认入库
+- SQLite 存储用户、班级、题目、Q 矩阵、作答记录和诊断结果
+- DINA-based 知识点掌握概率计算
+- 学生端掌握率可视化和规则推荐建议
+
+暂时不做：
+
+- OCR 扫描件识别
+- Word/PDF 试卷解析
+- 真实 LLM 自动出题
+- 多租户学校系统
+- 复杂管理员后台
+- 可变 Excel 模板
 
 ## 技术栈
 
 | 层级 | 技术 |
 | --- | --- |
-| 前端 | React 19、TypeScript、Vite、ECharts、CSS Modules |
-| 后端 | Node.js、Express 5、TypeScript |
+| 前端 | React、TypeScript、Vite、ECharts、CSS Modules |
+| 后端 | Node.js、Express、TypeScript |
 | 数据库 | SQLite、better-sqlite3 |
+| Excel | xlsx |
 | 测试 | Vitest、supertest |
-| AI 扩展点 | 试卷解析草稿、候选考点推荐、老师确认机制 |
 
 ## 项目结构
 
 ```text
 .
-├── backend/                  后端 API、数据库、测试
+├── backend/                  后端 API、SQLite、算法与测试
 │   ├── src/
-│   │   ├── db.ts             SQLite Schema 与旧库兼容重建
-│   │   ├── seed.ts           多年级、多学科、多考试种子数据
-│   │   ├── diagnosis.ts      成绩分析、题目分析、考点掌握聚合
-│   │   ├── paperDrafts.ts    AI 辅助试卷解析草稿流程
-│   │   └── server.ts         Express API
-│   └── tests/                后端单元测试、集成测试、E2E 测试
+│   │   ├── db.ts             数据库连接与 schema 初始化
+│   │   ├── seed.ts           Demo 数据初始化
+│   │   ├── diagnosis.ts      诊断/聚合逻辑
+│   │   ├── server.ts         Express API 入口
+│   │   └── algorithm/        DINA 算法模块
+│   └── tests/                后端测试
 ├── frontend/                 React 前端
 │   └── src/
-│       ├── App.tsx           页面主流程
-│       ├── data/mock.ts      API 客户端封装
-│       └── components/       图表和分析组件
+│       ├── App.tsx           页面主入口
+│       ├── components/       图表和页面组件
+│       └── data/             API/mock 数据适配
 ├── docs/
-│   ├── ai-paper-workflow.md  AI 辅助试卷解析设计说明
-│   └── excel-import.md       Excel 导入格式说明
-├── RUNNING.md                一键运行说明
+│   ├── schema.md             SDD 数据库 Schema
+│   ├── api.md                SDD REST API 契约
+│   ├── excel-template.md     固定 Excel 上传模板
+│   └── architecture.md       架构、权限边界和开发阶段
+├── RUNNING.md                Windows 运行说明
 ├── start.bat                 Windows 双击启动脚本
 ├── start-dev.ps1             PowerShell 启动脚本
 └── package.json              根目录统一命令
 ```
 
+## 当前完成度
+
+当前已经完成 **Step 1 到 Step 6 的简历 MVP 闭环**。
+
+已经完成：
+
+- SDD 文档：数据库 Schema、API 契约、Excel 模板、架构与权限边界
+- TDD 合同测试：登录、权限、Excel 校验、预览不入库、确认入库、DINA 输出
+- 后端 MVP：认证、RBAC、Excel 预览确认、DINA 诊断、学生个人结果 API
+- 前端 MVP：教师端、学生端、上传预览、诊断可视化和学习建议
+- E2E 测试：教师上传到学生查看诊断的完整链路
+- 交付文档：Prompt 记录和开发过程说明
+
 ## 一键运行
 
-推荐在项目根目录执行：
+在 Windows 下推荐执行：
 
 ```powershell
 npm.cmd start
 ```
 
-或者直接双击：
+或者双击：
 
 ```text
 start.bat
@@ -91,15 +105,24 @@ start.bat
 http://localhost:5173
 ```
 
-后端默认运行在：
+后端默认地址：
 
 ```text
 http://localhost:3000
 ```
 
+## 测试账号
+
+| 角色 | 账号 | 密码 |
+| --- | --- | --- |
+| 教师 | `teacher01` | `password123` |
+| 学生 | `stu001` | `password123` |
+
+首次启动或旧数据库缺少 MVP 用户时，后端会自动补齐 demo seed 数据。
+
 ## 手动运行
 
-如果你想分别启动前后端：
+后端：
 
 ```powershell
 cd C:\Users\User\Desktop\project\backend
@@ -107,7 +130,7 @@ npm.cmd install
 npm.cmd start
 ```
 
-再打开另一个终端：
+前端：
 
 ```powershell
 cd C:\Users\User\Desktop\project\frontend
@@ -115,105 +138,94 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-## 测试
+## 常用命令
 
-在项目根目录执行：
+根目录：
 
 ```powershell
 npm.cmd test
 npm.cmd run build
+npm.cmd run lint
+npm.cmd run check
 ```
 
 当前验证结果：
 
 ```text
-backend tests: 34 passed
-frontend build: passed
+backend tests: 49 passed
+backend + frontend build: passed
+frontend lint: passed
 ```
 
-## 主要 API
+后端：
 
-### 学生与考试
+```powershell
+cd C:\Users\User\Desktop\project\backend
+npm.cmd test
+npm.cmd run build
+npm.cmd run seed
+```
+
+前端：
+
+```powershell
+cd C:\Users\User\Desktop\project\frontend
+npm.cmd run dev
+npm.cmd run build
+npm.cmd run lint
+```
+
+## SDD 文档
+
+- [docs/schema.md](docs/schema.md)
+- [docs/api.md](docs/api.md)
+- [docs/excel-template.md](docs/excel-template.md)
+- [docs/architecture.md](docs/architecture.md)
+
+## 交付文档
+
+- [docs/prompts.md](docs/prompts.md)
+- [docs/development-notes.md](docs/development-notes.md)
+
+## 固定 Excel 模板
+
+当前 MVP 只接受固定 `.xlsx` 模板，第一行为表头：
 
 ```text
-GET /api/students
-GET /api/exams
-GET /api/students/:studentId/subjects
+student_no, student_name, class_name, exam_name,
+q1, q2, q3, q4, q5, q6, q7, q8, q9, q10,
+q11, q12, q13, q14, q15, q16, q17, q18, q19, q20
 ```
 
-### 多学科成绩总览
+`q1` 到 `q20` 只允许 `0` 或 `1`。详细说明见 [docs/excel-template.md](docs/excel-template.md)。
+
+## 核心 API
 
 ```text
-GET /api/students/:studentId/exams/:examId/overview
-GET /api/students/:studentId/trends
+POST /api/auth/login
+GET  /api/teacher/classes
+POST /api/teacher/uploads/preview
+POST /api/teacher/uploads/:uploadId/confirm
+GET  /api/student/me/results
+GET  /api/student/me/diagnosis?examId=:examId
 ```
 
-### 单科题目分析
+## Screenshots
 
-```text
-GET /api/students/:studentId/exams/:examId/subjects/:subjectId
-```
+将项目截图放到 `docs/screenshots/` 后，README 会直接展示完整演示闭环：
 
-返回单科总分、班级排名、年级排名、每题满分、每题得分、得分率和低分题列表。
+![Login](docs/screenshots/01-login.png)
 
-### 单科考点掌握
+![Teacher Upload](docs/screenshots/02-teacher-upload.png)
 
-```text
-GET /api/students/:studentId/exams/:examId/subjects/:subjectId/knowledge
-GET /api/students/:studentId/subjects/:subjectId/knowledge-trends
-```
+![Upload Preview](docs/screenshots/03-upload-preview.png)
 
-考点掌握率基于“每题得分率 × 题目-考点权重”聚合得到，当前阶段强调可解释性。
+![Student Diagnosis](docs/screenshots/04-student-diagnosis.png)
 
-### AI 辅助试卷解析草稿
+## 面试讲解定位
 
-```text
-POST /api/paper-drafts
-GET /api/paper-drafts/:draftId
-POST /api/paper-drafts/:draftId/confirm
-```
+这个项目可以包装为：
 
-当前版本使用规则引擎模拟 AI 推荐考点。真实 LLM、OCR、Word/PDF 解析可以在 `backend/src/paperDrafts.ts` 中替换候选生成逻辑。
+> A full-stack AI-powered educational diagnosis platform with teacher/student portals, role-based access control, Excel score import with validation preview, DINA-based cognitive diagnosis, and student-facing mastery visualizations.
 
-## 五阶段开发成果
-
-### 阶段一：数据模型升级
-
-从固定 Q1-Q20 模型升级为：
-
-```text
-年级 -> 学科 -> 考试 -> 试卷 -> 题目 -> 学生成绩 -> 考点映射
-```
-
-### 阶段二：多学科成绩总览
-
-实现学生选择、考试选择、学科成绩雷达图、总分趋势、班级排名趋势、年级排名趋势、各科成绩趋势。
-
-### 阶段三：单科题目分析
-
-实现单科总分、单科排名、每题满分、每题得分、每题得分率、低分题列表。
-
-### 阶段四：单科考点掌握分析
-
-实现考点掌握地图、考点掌握趋势、薄弱考点排序。
-
-### 阶段五：AI 辅助试卷解析扩展点
-
-实现试卷解析草稿、候选考点推荐、老师确认机制。AI 推荐结果不会直接写入正式试卷表，避免错误污染正式数据。
-
-## 数据库兼容说明
-
-项目启动时会检测旧版 Demo 数据库。如果发现旧表结构，例如旧 `students` 表没有 `grade_id`，系统会自动重建为新版多学科 schema，并写入新的种子数据。
-
-## 后续可扩展方向
-
-- 长表 Excel 导入
-- 老师确认草稿后的正式入库 UI
-- Word/PDF 试卷文本解析
-- OCR 识别扫描件
-- 接入真实 LLM 推荐题目考点
-- 更细粒度的班级、年级、学期管理
-
-## License
-
-MIT
+核心讲解重点是工程闭环和 AI 协作过程，而不是堆功能。

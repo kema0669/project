@@ -3,16 +3,18 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "tsx src/server.ts",
     "seed": "tsx src/seed.ts",
-    "db:reset": "rm -f data/cdi.db && npm run seed"
+    "db:reset": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Remove-Item -LiteralPath data/cdi.db -Force -ErrorAction SilentlyContinue; npm.cmd run seed\""
   },
   "dependencies": {
     "better-sqlite3": "^12.0.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "formidable": "^3.5.4",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

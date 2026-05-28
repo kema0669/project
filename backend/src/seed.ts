@@ -118,6 +118,91 @@ function recomputeRanks(db: Database.Database): void {
   }
 }
 
+function seedMvpData(db: Database.Database): void {
+  const insertUser = db.prepare(`
+    INSERT INTO users (id, username, password_hash, role, display_name)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(username) DO UPDATE SET
+      password_hash = excluded.password_hash,
+      role = excluded.role,
+      display_name = excluded.display_name
+  `);
+  const insertClass = db.prepare(`
+    INSERT INTO classes (id, name, teacher_user_id)
+    VALUES (1, 'Class A', 1)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      teacher_user_id = excluded.teacher_user_id
+  `);
+  const updateStudent = db.prepare(`
+    UPDATE students
+    SET user_id = ?, class_id = 1, student_no = ?, class_name = 'Class A'
+    WHERE id = ?
+  `);
+  const insertMvpKnowledge = db.prepare(`
+    INSERT INTO knowledge_points (id, subject_id, code, name, description, level, sort_order)
+    VALUES (?, 2, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      code = excluded.code,
+      name = excluded.name,
+      description = excluded.description,
+      level = excluded.level,
+      sort_order = excluded.sort_order
+  `);
+  const insertRelation = db.prepare(`
+    INSERT OR IGNORE INTO knowledge_relations (from_knowledge_point_id, to_knowledge_point_id, relation_type)
+    VALUES (?, ?, 'prerequisite')
+  `);
+  const insertExam = db.prepare(`
+    INSERT INTO exams (id, class_id, name, question_count, created_by_user_id)
+    VALUES (1, 1, 'DINA Diagnostic Quiz', 20, 1)
+    ON CONFLICT(id) DO UPDATE SET
+      class_id = excluded.class_id,
+      name = excluded.name,
+      question_count = excluded.question_count,
+      created_by_user_id = excluded.created_by_user_id
+  `);
+  const insertQuestion = db.prepare(`
+    INSERT INTO questions (id, exam_id, question_no, content, difficulty)
+    VALUES (?, 1, ?, ?, ?)
+    ON CONFLICT(exam_id, question_no) DO UPDATE SET
+      content = excluded.content,
+      difficulty = excluded.difficulty
+  `);
+  const insertQMatrix = db.prepare(`
+    INSERT OR IGNORE INTO q_matrix (question_id, knowledge_point_id, weight)
+    VALUES (?, ?, 1)
+  `);
+
+  insertUser.run(1, 'teacher01', 'password123', 'teacher', 'Teacher Demo');
+  for (let i = 1; i <= 10; i++) {
+    insertUser.run(100 + i, `stu${String(i).padStart(3, '0')}`, 'password123', 'student', `Student ${i}`);
+  }
+  insertClass.run();
+
+  const studentRows = db.prepare('SELECT id FROM students ORDER BY id LIMIT 10').all() as { id: number }[];
+  studentRows.forEach((student, index) => {
+    updateStudent.run(101 + index, `S${String(index + 1).padStart(3, '0')}`, student.id);
+  });
+
+  const knowledgeRows = [
+    [1, 'kp_number', 'Number Sense', 'Basic number concepts', 1, 1],
+    [2, 'kp_fraction', 'Fractions', 'Fraction operations', 1, 2],
+    [3, 'kp_equation', 'Equation Basics', 'Linear equation basics', 2, 3],
+    [4, 'kp_geometry', 'Geometry', 'Basic geometry reasoning', 2, 4],
+    [5, 'kp_application', 'Applications', 'Word problems and applications', 3, 5],
+  ] as const;
+  for (const row of knowledgeRows) insertMvpKnowledge.run(...row);
+  for (let i = 1; i < 5; i++) insertRelation.run(i, i + 1);
+
+  insertExam.run();
+  for (let i = 1; i <= 20; i++) {
+    insertQuestion.run(i, i, `Question ${i}`, 0.35 + (i % 5) * 0.1);
+    insertQMatrix.run(i, ((i - 1) % 5) + 1);
+    if (i % 4 === 0) insertQMatrix.run(i, 5);
+  }
+}
+
 export function seedData(db: Database.Database): void {
   const trx = db.transaction(() => {
     const insertGrade = db.prepare('INSERT OR IGNORE INTO grades (id, code, name, stage) VALUES (?, ?, ?, ?)');
@@ -258,6 +343,7 @@ export function seedData(db: Database.Database): void {
     }
 
     recomputeRanks(db);
+    seedMvpData(db);
   });
 
   trx();

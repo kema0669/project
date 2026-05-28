@@ -1,64 +1,81 @@
 import type {
-  ExamOption,
-  KnowledgeTrendResponse,
-  StudentOption,
-  StudentOverview,
-  StudentTrends,
-  SubjectAnalysis,
-  SubjectKnowledgeAnalysis,
+  ApiError,
+  ConfirmImportResult,
+  LoginResult,
+  StudentDiagnosis,
+  StudentResult,
+  TeacherClass,
+  UploadPreview,
 } from '../types';
 
-export async function fetchStudents(): Promise<StudentOption[]> {
-  const res = await fetch('/api/students');
-  if (!res.ok) throw new Error('Failed to fetch students');
-  const data = (await res.json()) as { students: StudentOption[] };
-  return data.students;
+const API_BASE = '/api';
+
+async function readJson<T>(res: Response): Promise<T> {
+  const body = (await res.json().catch(() => ({}))) as ApiError & { data?: T };
+  if (!res.ok) {
+    throw new Error(body.error?.message ?? 'Request failed');
+  }
+  return body.data as T;
 }
 
-export async function fetchExams(): Promise<ExamOption[]> {
-  const res = await fetch('/api/exams');
-  if (!res.ok) throw new Error('Failed to fetch exams');
-  const data = (await res.json()) as { exams: ExamOption[] };
-  return data.exams;
+export async function login(username: string, password: string): Promise<LoginResult> {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  return readJson<LoginResult>(res);
 }
 
-export async function fetchOverview(studentId: number, examId: number): Promise<StudentOverview> {
-  const res = await fetch(`/api/students/${studentId}/exams/${examId}/overview`);
-  if (!res.ok) throw new Error('Failed to fetch overview');
-  return res.json() as Promise<StudentOverview>;
+export async function fetchTeacherClasses(token: string): Promise<TeacherClass[]> {
+  const res = await fetch(`${API_BASE}/teacher/classes`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return readJson<TeacherClass[]>(res);
 }
 
-export async function fetchTrends(studentId: number): Promise<StudentTrends> {
-  const res = await fetch(`/api/students/${studentId}/trends`);
-  if (!res.ok) throw new Error('Failed to fetch trends');
-  return res.json() as Promise<StudentTrends>;
+export async function previewUpload(
+  token: string,
+  input: {
+    classId: number;
+    examName: string;
+    file: File;
+  }
+): Promise<UploadPreview> {
+  const form = new FormData();
+  form.append('classId', String(input.classId));
+  form.append('examName', input.examName);
+  form.append('file', input.file);
+  const res = await fetch(`${API_BASE}/teacher/uploads/preview`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  return readJson<UploadPreview>(res);
 }
 
-export async function fetchSubjectAnalysis(
-  studentId: number,
-  examId: number,
-  subjectId: number
-): Promise<SubjectAnalysis> {
-  const res = await fetch(`/api/students/${studentId}/exams/${examId}/subjects/${subjectId}`);
-  if (!res.ok) throw new Error('Failed to fetch subject analysis');
-  return res.json() as Promise<SubjectAnalysis>;
+export async function confirmUpload(token: string, uploadId: number): Promise<ConfirmImportResult> {
+  const res = await fetch(`${API_BASE}/teacher/uploads/${uploadId}/confirm`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ runDiagnosis: true }),
+  });
+  return readJson<ConfirmImportResult>(res);
 }
 
-export async function fetchSubjectKnowledgeAnalysis(
-  studentId: number,
-  examId: number,
-  subjectId: number
-): Promise<SubjectKnowledgeAnalysis> {
-  const res = await fetch(`/api/students/${studentId}/exams/${examId}/subjects/${subjectId}/knowledge`);
-  if (!res.ok) throw new Error('Failed to fetch subject knowledge analysis');
-  return res.json() as Promise<SubjectKnowledgeAnalysis>;
+export async function fetchStudentResults(token: string): Promise<StudentResult[]> {
+  const res = await fetch(`${API_BASE}/student/me/results`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return readJson<StudentResult[]>(res);
 }
 
-export async function fetchSubjectKnowledgeTrends(
-  studentId: number,
-  subjectId: number
-): Promise<KnowledgeTrendResponse> {
-  const res = await fetch(`/api/students/${studentId}/subjects/${subjectId}/knowledge-trends`);
-  if (!res.ok) throw new Error('Failed to fetch subject knowledge trends');
-  return res.json() as Promise<KnowledgeTrendResponse>;
+export async function fetchStudentDiagnosis(token: string, examId: number): Promise<StudentDiagnosis> {
+  const res = await fetch(`${API_BASE}/student/me/diagnosis?examId=${examId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return readJson<StudentDiagnosis>(res);
 }

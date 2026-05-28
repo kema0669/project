@@ -1,25 +1,20 @@
 import { describe, it, expect } from 'vitest';
 
 describe('Excel Import Contract', () => {
-  it('should document the new long-table score import columns', () => {
+  it('should document the fixed MVP score import columns', () => {
     const requiredColumns = [
-      '学号',
-      '姓名',
-      '年级',
-      '班级',
-      '考试',
-      '日期',
-      '科目',
-      '题号',
-      '满分',
-      '得分',
-      '考点',
+      'student_no',
+      'student_name',
+      'class_name',
+      'exam_name',
+      ...Array.from({ length: 20 }, (_, index) => `q${index + 1}`),
     ];
 
-    expect(requiredColumns).toContain('科目');
-    expect(requiredColumns).toContain('题号');
-    expect(requiredColumns).toContain('满分');
-    expect(requiredColumns).toContain('得分');
-    expect(requiredColumns).not.toContain('Q1');
+    expect(requiredColumns).toContain('student_no');
+    expect(requiredColumns).toContain('exam_name');
+    expect(requiredColumns).toContain('q1');
+    expect(requiredColumns).toContain('q20');
+    expect(requiredColumns).not.toContain('subject');
+    expect(requiredColumns).not.toContain('question_no');
   });
 });

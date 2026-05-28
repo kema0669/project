@@ -1,3 +1,123 @@
+export type Role = 'teacher' | 'student';
+export type LoadingState = 'idle' | 'loading' | 'success' | 'error';
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  role: Role;
+  displayName: string;
+  studentId?: number;
+}
+
+export interface LoginResult {
+  token: string;
+  user: AuthUser;
+}
+
+export interface TeacherClass {
+  id: number;
+  name: string;
+  studentCount: number;
+  latestExamId?: number;
+}
+
+export interface UploadPreviewRow {
+  rowNumber: number;
+  studentNo: string;
+  studentName: string;
+  answers: Record<string, 0 | 1>;
+  errors: Array<{
+    rowNumber: number;
+    field: string;
+    message: string;
+  }>;
+}
+
+export interface UploadPreview {
+  uploadId: number;
+  status: 'previewed';
+  summary: {
+    rowCount: number;
+    validRowCount: number;
+    errorRowCount: number;
+    questionCount: number;
+  };
+  rows: UploadPreviewRow[];
+  errors: Array<{
+    rowNumber?: number;
+    field: string;
+    message: string;
+  }>;
+}
+
+export interface ConfirmImportResult {
+  uploadId: number;
+  examId: number;
+  status: 'confirmed';
+  importedResponses: number;
+  diagnosedStudents: number;
+}
+
+export interface StudentResult {
+  examId: number;
+  examName: string;
+  score: number;
+  total: number;
+  correctRate: number;
+  createdAt: string;
+}
+
+export interface MasteryPoint {
+  knowledgePointId: number;
+  code: string;
+  name: string;
+  masteryProbability: number;
+  level: 'weak' | 'medium' | 'strong';
+  evidenceCorrect: number;
+  evidenceTotal: number;
+}
+
+export interface StudentDiagnosis {
+  examId: number;
+  student: {
+    id: number;
+    studentNo: string;
+    name: string;
+  };
+  score: {
+    correct: number;
+    total: number;
+    correctRate: number;
+  };
+  mastery: MasteryPoint[];
+  weakPoints: Array<{
+    knowledgePointId: number;
+    name: string;
+    masteryProbability: number;
+  }>;
+  recommendation: string;
+  knowledgeGraph: {
+    nodes: Array<{
+      id: number;
+      name: string;
+      masteryProbability: number;
+    }>;
+    edges: Array<{
+      from: number;
+      to: number;
+      type: string;
+    }>;
+  };
+}
+
+export interface ApiError {
+  error?: {
+    code: string;
+    message: string;
+    details?: unknown[];
+  };
+}
+
 export interface StudentOption {
   id: number;
   externalId: string;
@@ -108,16 +228,3 @@ export interface KnowledgeTrendPoint {
 export interface KnowledgeTrendResponse {
   trends: KnowledgeTrendPoint[];
 }
-
-export interface ImportSummary {
-  examId?: number;
-  examName?: string;
-  totalRows?: number;
-  importedScores?: number;
-  newStudents?: number;
-  updatedStudents?: number;
-  responseCount?: number;
-  warnings?: string[];
-}
-
-export type LoadingState = 'idle' | 'loading' | 'success' | 'error';

@@ -5,6 +5,11 @@
     "start": "powershell -ExecutionPolicy Bypass -File ./start-dev.ps1",
     "dev": "powershell -ExecutionPolicy Bypass -File ./start-dev.ps1",
     "test": "npm.cmd --prefix backend test",
-    "build": "npm.cmd --prefix frontend run build"
+    "test:backend": "npm.cmd --prefix backend test",
+    "build": "npm.cmd run build:backend && npm.cmd run build:frontend",
+    "build:backend": "npm.cmd --prefix backend run build",
+    "build:frontend": "npm.cmd --prefix frontend run build",
+    "lint": "npm.cmd --prefix frontend run lint",
+    "check": "npm.cmd run test && npm.cmd run build && npm.cmd run lint"
   }
 }

@@ -11,11 +11,16 @@ function tableColumns(db: Database.Database, tableName: string): string[] {
   return (db.prepare(`PRAGMA table_info(${tableName})`).all() as { name: string }[]).map((column) => column.name);
 }
 
+function addColumnIfMissing(db: Database.Database, tableName: string, columnName: string, definition: string): void {
+  if (!tableExists(db, tableName) || tableColumns(db, tableName).includes(columnName)) return;
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+}
+
 function resetLegacySchemaIfNeeded(db: Database.Database): void {
   // 旧版 Demo 使用 students/questions/responses 等固定数学测试表。
   // 新版模型需要 grade_id、subjects、papers 等字段；检测到旧库时自动重建，保证一键启动可直接运行。
   const hasLegacyStudents = tableExists(db, 'students') && !tableColumns(db, 'students').includes('grade_id');
-  const hasLegacyQuestions = tableExists(db, 'questions');
+  const hasLegacyQuestions = tableExists(db, 'questions') && !tableColumns(db, 'questions').includes('exam_id');
   if (!hasLegacyStudents && !hasLegacyQuestions) return;
 
   db.pragma('foreign_keys = OFF');
@@ -28,13 +33,20 @@ function resetLegacySchemaIfNeeded(db: Database.Database): void {
     DROP TABLE IF EXISTS imports;
     DROP TABLE IF EXISTS question_knowledge_map;
     DROP TABLE IF EXISTS knowledge_relations;
+    DROP TABLE IF EXISTS recommendations;
+    DROP TABLE IF EXISTS diagnosis_results;
     DROP TABLE IF EXISTS responses;
+    DROP TABLE IF EXISTS uploads;
+    DROP TABLE IF EXISTS q_matrix;
     DROP TABLE IF EXISTS paper_questions;
     DROP TABLE IF EXISTS papers;
     DROP TABLE IF EXISTS questions;
+    DROP TABLE IF EXISTS exams;
     DROP TABLE IF EXISTS exam_batches;
     DROP TABLE IF EXISTS assessments;
     DROP TABLE IF EXISTS students;
+    DROP TABLE IF EXISTS classes;
+    DROP TABLE IF EXISTS users;
     DROP TABLE IF EXISTS grade_subjects;
     DROP TABLE IF EXISTS knowledge_points;
     DROP TABLE IF EXISTS subjects;
@@ -220,6 +232,131 @@ export function initDatabase(dbPath: string): Database.Database {
       UNIQUE(question_draft_id, knowledge_point_id),
       FOREIGN KEY (question_draft_id) REFERENCES paper_question_drafts(id),
       FOREIGN KEY (knowledge_point_id) REFERENCES knowledge_points(id)
+    );
+  `);
+
+  addColumnIfMissing(db, 'students', 'user_id', 'INTEGER');
+  addColumnIfMissing(db, 'students', 'class_id', 'INTEGER');
+  addColumnIfMissing(db, 'students', 'student_no', 'TEXT');
+  addColumnIfMissing(db, 'knowledge_points', 'sort_order', 'INTEGER');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('teacher', 'student')),
+      display_name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS classes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      teacher_user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (teacher_user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS knowledge_relations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_knowledge_point_id INTEGER NOT NULL,
+      to_knowledge_point_id INTEGER NOT NULL,
+      relation_type TEXT NOT NULL DEFAULT 'prerequisite',
+      UNIQUE(from_knowledge_point_id, to_knowledge_point_id, relation_type),
+      FOREIGN KEY (from_knowledge_point_id) REFERENCES knowledge_points(id),
+      FOREIGN KEY (to_knowledge_point_id) REFERENCES knowledge_points(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS exams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      class_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      question_count INTEGER NOT NULL DEFAULT 20,
+      created_by_user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(class_id, name),
+      FOREIGN KEY (class_id) REFERENCES classes(id),
+      FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exam_id INTEGER NOT NULL,
+      question_no INTEGER NOT NULL,
+      content TEXT,
+      difficulty REAL NOT NULL DEFAULT 0.5,
+      UNIQUE(exam_id, question_no),
+      FOREIGN KEY (exam_id) REFERENCES exams(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS q_matrix (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      question_id INTEGER NOT NULL,
+      knowledge_point_id INTEGER NOT NULL,
+      weight INTEGER NOT NULL DEFAULT 1,
+      UNIQUE(question_id, knowledge_point_id),
+      FOREIGN KEY (question_id) REFERENCES questions(id),
+      FOREIGN KEY (knowledge_point_id) REFERENCES knowledge_points(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS uploads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      teacher_user_id INTEGER NOT NULL,
+      class_id INTEGER NOT NULL,
+      exam_id INTEGER,
+      original_filename TEXT NOT NULL,
+      status TEXT NOT NULL,
+      row_count INTEGER NOT NULL,
+      error_count INTEGER NOT NULL,
+      preview_payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      confirmed_at TEXT,
+      FOREIGN KEY (teacher_user_id) REFERENCES users(id),
+      FOREIGN KEY (class_id) REFERENCES classes(id),
+      FOREIGN KEY (exam_id) REFERENCES exams(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS responses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exam_id INTEGER NOT NULL,
+      student_id INTEGER NOT NULL,
+      question_id INTEGER NOT NULL,
+      is_correct INTEGER NOT NULL CHECK(is_correct IN (0, 1)),
+      upload_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(exam_id, student_id, question_id),
+      FOREIGN KEY (exam_id) REFERENCES exams(id),
+      FOREIGN KEY (student_id) REFERENCES students(id),
+      FOREIGN KEY (question_id) REFERENCES questions(id),
+      FOREIGN KEY (upload_id) REFERENCES uploads(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS diagnosis_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exam_id INTEGER NOT NULL,
+      student_id INTEGER NOT NULL,
+      knowledge_point_id INTEGER NOT NULL,
+      mastery_probability REAL NOT NULL,
+      evidence_correct INTEGER NOT NULL,
+      evidence_total INTEGER NOT NULL,
+      model_version TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(exam_id, student_id, knowledge_point_id, model_version),
+      FOREIGN KEY (exam_id) REFERENCES exams(id),
+      FOREIGN KEY (student_id) REFERENCES students(id),
+      FOREIGN KEY (knowledge_point_id) REFERENCES knowledge_points(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS recommendations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exam_id INTEGER NOT NULL,
+      student_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'rule',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (exam_id) REFERENCES exams(id),
+      FOREIGN KEY (student_id) REFERENCES students(id)
     );
   `);
 

@@ -265,6 +265,18 @@ export function estimateDINA(
   }
 
   // 输出：每个学生的每个知识点的掌握概率
+  const evidenceByStudentAndKnowledge = new Map<string, { evidenceCorrect: number; evidenceTotal: number }>();
+  for (const studentId of studentIds) {
+    for (let k = 1; k <= nAttrs; k++) {
+      const questionIds = qMatrix.filter((entry) => entry.knowledgePointId === k && entry.weight === 1).map((entry) => entry.questionId);
+      const relatedResponses = xMatrix.filter((entry) => entry.studentId === studentId && questionIds.includes(entry.questionId));
+      evidenceByStudentAndKnowledge.set(`${studentId}-${k}`, {
+        evidenceCorrect: relatedResponses.filter((entry) => entry.isCorrect === 1).length,
+        evidenceTotal: relatedResponses.length,
+      });
+    }
+  }
+
   const result: MasteryProbability[] = [];
   for (let j = 0; j < nStudents; j++) {
     for (let k = 0; k < nAttrs; k++) {
@@ -272,10 +284,16 @@ export function estimateDINA(
       for (let m = 0; m < nPatterns; m++) {
         prob += finalPosterior[j][m] * patterns[m][k];
       }
+      const evidence = evidenceByStudentAndKnowledge.get(`${studentIds[j]}-${k + 1}`) ?? {
+        evidenceCorrect: 0,
+        evidenceTotal: 0,
+      };
       result.push({
         studentId: studentIds[j],
         knowledgePointId: k + 1,
         probability: Math.round(prob * 1000) / 1000,
+        evidenceCorrect: evidence.evidenceCorrect,
+        evidenceTotal: evidence.evidenceTotal,
       });
     }
   }

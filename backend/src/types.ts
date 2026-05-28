@@ -84,3 +84,23 @@ export interface SubjectScoreSummary {
   classRank?: number;
   gradeRank?: number;
 }
+
+export interface QMatrixEntry {
+  questionId: number;
+  knowledgePointId: number;
+  weight: 0 | 1;
+}
+
+export interface XMatrixEntry {
+  studentId: number;
+  questionId: number;
+  isCorrect: 0 | 1;
+}
+
+export interface MasteryProbability {
+  studentId: number;
+  knowledgePointId: number;
+  probability: number;
+  evidenceCorrect: number;
+  evidenceTotal: number;
+}

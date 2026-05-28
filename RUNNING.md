@@ -1,6 +1,6 @@
 # 一键运行说明
 
-本项目在 Windows 下提供两种一键启动方式。
+本项目在 Windows 下提供两种一键启动方式。当前 MVP 的产品闭环是：教师上传固定模板 Excel 成绩，系统校验并确认入库，学生登录后查看自己的诊断结果。
 
 ## 方式一：双击启动
 
@@ -36,18 +36,20 @@ powershell -ExecutionPolicy Bypass -File .\start-dev.ps1
 ```powershell
 npm.cmd test
 npm.cmd run build
+npm.cmd run lint
+npm.cmd run check
 ```
 
-其中 `npm.cmd test` 会运行后端测试，`npm.cmd run build` 会构建前端。
+其中 `npm.cmd test` 会运行后端测试，`npm.cmd run build` 会构建前后端，`npm.cmd run lint` 会检查前端代码，`npm.cmd run check` 会串联测试、构建和 lint。
 
 ## 访问地址
 
 - 前端页面：http://localhost:5173
 - 后端接口：http://localhost:3000
-- 学生列表接口：http://localhost:3000/api/students
+- 后端健康/API 地址：http://localhost:3000
 
 ## Excel 导入
 
-页面顶部有 Excel 导入区。文件格式见 `docs/excel-import.md`。
+固定模板见 `docs/excel-template.md`。
 
-导入后系统会新增一个测试批次，并在页面中展示该学生的成绩变化曲线和知识点掌握变化曲线。
+后续实现阶段会补齐教师上传预览、错误行提示、确认入库、DINA 诊断和学生端可视化页面。
