@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import type { Application } from 'express';
 
-describe('E2E: Full Stack Integration', () => {
+describe('E2E: multi-subject score overview API', () => {
   let app: Application;
 
   beforeAll(async () => {
@@ -11,61 +11,108 @@ describe('E2E: Full Stack Integration', () => {
     app = mod.default;
   });
 
-  it('GET /api/students should return 10 students', async () => {
+  it('GET /api/students should return active students with grade info', async () => {
     const res = await request(app).get('/api/students');
     expect(res.status).toBe(200);
-    expect(res.body.students).toHaveLength(10);
-    expect(res.body.students[0].name).toBe('张三');
+    expect(res.body.students.length).toBeGreaterThanOrEqual(9);
+    expect(res.body.students[0]).toHaveProperty('gradeName');
+    expect(res.body.students[0]).toHaveProperty('className');
   });
 
-  it('GET /api/knowledge-points should return 5 knowledge points', async () => {
-    const res = await request(app).get('/api/knowledge-points');
+  it('GET /api/exams should return seeded exams', async () => {
+    const res = await request(app).get('/api/exams');
     expect(res.status).toBe(200);
-    expect(res.body.knowledgePoints).toHaveLength(5);
+    expect(res.body.exams).toHaveLength(3);
   });
 
-  it('GET /api/knowledge-relations should return 3 relations', async () => {
-    const res = await request(app).get('/api/knowledge-relations');
+  it('GET /api/students/:studentId/subjects should hide unstudied subjects', async () => {
+    const res = await request(app).get('/api/students/1/subjects');
     expect(res.status).toBe(200);
-    expect(res.body.relations).toHaveLength(3);
+    const codes = res.body.subjects.map((s: { subjectCode: string }) => s.subjectCode);
+    expect(codes).toContain('chinese');
+    expect(codes).toContain('biology');
+    expect(codes).not.toContain('physics');
   });
 
-  it('GET /api/diagnosis/:studentId should return valid diagnosis', async () => {
-    const res = await request(app).get('/api/diagnosis/1');
+  it('GET /api/students/:studentId/exams/:examId/overview should return score radar data', async () => {
+    const res = await request(app).get('/api/students/4/exams/3/overview');
     expect(res.status).toBe(200);
-    expect(res.body.studentName).toBe('张三');
-    expect(res.body.overallMastery).toBeGreaterThan(0);
-    expect(res.body.knowledges).toHaveLength(5);
-    for (const k of res.body.knowledges) {
-      expect(k.masteryProbability).toBeGreaterThanOrEqual(0);
-      expect(k.masteryProbability).toBeLessThanOrEqual(1);
-    }
+    expect(res.body.student.gradeName).toBe('初二');
+    expect(res.body.subjects.length).toBeGreaterThanOrEqual(8);
+    expect(res.body.totalScore).toBeGreaterThan(0);
+    expect(res.body.classRank).toBeGreaterThanOrEqual(1);
+    expect(res.body.gradeRank).toBeGreaterThanOrEqual(1);
   });
 
-  it('GET /api/diagnosis/999 should return 404', async () => {
-    const res = await request(app).get('/api/diagnosis/999');
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBe('Student not found');
+  it('GET /api/students/:studentId/trends should return score and rank trends', async () => {
+    const res = await request(app).get('/api/students/7/trends');
+    expect(res.status).toBe(200);
+    expect(res.body.scoreTrend).toHaveLength(3);
+    expect(res.body.subjectTrends.length).toBeGreaterThan(3);
+    expect(res.body.scoreTrend[0]).toHaveProperty('classRank');
+    expect(res.body.scoreTrend[0]).toHaveProperty('gradeRank');
   });
 
-  it('should rank top student higher than weak student via API', async () => {
-    const [res1, res3] = await Promise.all([
-      request(app).get('/api/diagnosis/1'),
-      request(app).get('/api/diagnosis/3'),
-    ]);
-    expect(res1.body.overallMastery).toBeGreaterThan(res3.body.overallMastery);
+  it('GET /api/students/:studentId/exams/:examId/subjects/:subjectId should return question-level subject analysis', async () => {
+    const res = await request(app).get('/api/students/4/exams/3/subjects/4');
+    expect(res.status).toBe(200);
+    expect(res.body.subject.subjectCode).toBe('physics');
+    expect(res.body.questions).toHaveLength(5);
+    expect(res.body.questions[0].score).toBeGreaterThanOrEqual(0);
+    expect(res.body.questions[0].maxScore).toBeGreaterThan(0);
+    expect(res.body.weakQuestions.every((q: { scoreRate: number }) => q.scoreRate < 0.7)).toBe(true);
   });
 
-  it('POST /api/diagnosis/suggest should return personalized suggestion', async () => {
-    const diagnosisRes = await request(app).get('/api/diagnosis/2');
-    expect(diagnosisRes.status).toBe(200);
+  it('GET /api/students/:studentId/exams/:examId/subjects/:subjectId/knowledge should return knowledge mastery', async () => {
+    const res = await request(app).get('/api/students/4/exams/3/subjects/4/knowledge');
+    expect(res.status).toBe(200);
+    expect(res.body.subject.subjectCode).toBe('physics');
+    expect(res.body.knowledges.length).toBeGreaterThanOrEqual(3);
+    expect(res.body.knowledges[0].masteryRate).toBeGreaterThanOrEqual(0);
+    expect(res.body.knowledges[0].masteryRate).toBeLessThanOrEqual(1);
+  });
+
+  it('GET /api/students/:studentId/subjects/:subjectId/knowledge-trends should return knowledge mastery trends', async () => {
+    const res = await request(app).get('/api/students/4/subjects/4/knowledge-trends');
+    expect(res.status).toBe(200);
+    expect(res.body.trends.length).toBeGreaterThanOrEqual(9);
+    expect(res.body.trends[0]).toHaveProperty('examName');
+    expect(res.body.trends[0]).toHaveProperty('knowledgePointName');
+  });
+
+  it('POST /api/paper-drafts should create an AI-assisted review draft', async () => {
+    const res = await request(app)
+      .post('/api/paper-drafts')
+      .send({
+        examId: 3,
+        gradeId: 2,
+        subjectId: 4,
+        sourceName: '八年级物理试卷.docx',
+        questions: [{ questionNo: 1, title: '分析小车运动状态', maxScore: 10 }],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.draft.status).toBe('needs_review');
+    expect(res.body.draft.questions[0].candidates.length).toBeGreaterThan(0);
+  });
+
+  it('POST /api/paper-drafts/:draftId/confirm should mark a draft as confirmed', async () => {
+    const created = await request(app)
+      .post('/api/paper-drafts')
+      .send({
+        examId: 3,
+        gradeId: 2,
+        subjectId: 4,
+        sourceName: 'teacher-upload.xlsx',
+        questions: [{ questionNo: 1, title: '声现象实验题', maxScore: 12 }],
+      });
 
     const res = await request(app)
-      .post('/api/diagnosis/suggest')
-      .send({ diagnosisResult: diagnosisRes.body });
+      .post(`/api/paper-drafts/${created.body.draft.id}/confirm`)
+      .send({ reviewerNote: '老师确认后进入正式入库流程' });
 
     expect(res.status).toBe(200);
-    expect(typeof res.body.suggestion).toBe('string');
-    expect(res.body.suggestion.length).toBeGreaterThan(0);
+    expect(res.body.draft.status).toBe('confirmed');
+    expect(res.body.draft.reviewerNote).toContain('老师确认');
   });
 });

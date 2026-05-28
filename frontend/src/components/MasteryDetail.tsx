@@ -1,52 +1,40 @@
-import type { KnowledgeMastery } from '../types';
+import type { SubjectScoreSummary } from '../types';
 import styles from './MasteryDetail.module.css';
 
 interface Props {
-  knowledges: KnowledgeMastery[];
-  overallMastery: number;
+  subjects: SubjectScoreSummary[];
 }
 
-function getRating(probability: number): { label: string; className: string } {
-  if (probability >= 0.8) return { label: '优秀', className: styles.excellent };
-  if (probability >= 0.5) return { label: '良好', className: styles.good };
-  return { label: '薄弱', className: styles.weak };
+function rating(rate: number): { label: string; className: string } {
+  if (rate >= 0.85) return { label: '优势', className: styles.excellent };
+  if (rate >= 0.7) return { label: '稳定', className: styles.good };
+  return { label: '需提升', className: styles.weak };
 }
 
-export default function MasteryDetail({ knowledges, overallMastery }: Props) {
-  const overallRating = getRating(overallMastery);
-
+export default function MasteryDetail({ subjects }: Props) {
   return (
     <div className={styles.card}>
-      <h3 className={styles.title}>📋 诊断详情</h3>
-
-      <div className={styles.overall}>
-        <span className={styles.overallLabel}>综合掌握度</span>
-        <span className={`${styles.overallValue} ${overallRating.className}`}>
-          {(overallMastery * 100).toFixed(0)}%
-        </span>
-        <span className={`${styles.badge} ${overallRating.className}`}>
-          {overallRating.label}
-        </span>
-      </div>
+      <h3 className={styles.title}>各科成绩详情</h3>
 
       <ul className={styles.list}>
-        {knowledges.map((k) => {
-          const rating = getRating(k.masteryProbability);
-          const pct = (k.masteryProbability * 100).toFixed(0);
+        {subjects.map((subject) => {
+          const rate = subject.score / subject.totalScore;
+          const current = rating(rate);
+          const pct = Math.round(rate * 100);
 
           return (
-            <li key={k.knowledgePointId} className={styles.item}>
+            <li key={subject.subjectId} className={styles.item}>
               <div className={styles.itemHeader}>
-                <span className={styles.itemName}>{k.knowledgePointName}</span>
-                <span className={`${styles.itemValue} ${rating.className}`}>
-                  {pct}%
+                <span className={styles.itemName}>{subject.subjectName}</span>
+                <span className={`${styles.itemValue} ${current.className}`}>
+                  {subject.score}/{subject.totalScore}
                 </span>
               </div>
               <div className={styles.progressBar}>
-                <div
-                  className={`${styles.progressFill} ${rating.className}`}
-                  style={{ width: `${pct}%` }}
-                />
+                <div className={`${styles.progressFill} ${current.className}`} style={{ width: `${pct}%` }} />
+              </div>
+              <div className={styles.overallLabel}>
+                {current.label} · 班级第 {subject.classRank ?? '-'} · 年级第 {subject.gradeRank ?? '-'}
               </div>
             </li>
           );

@@ -1,40 +1,123 @@
-/**
- * DDD 阶段：前端类型定义
- * 从 SDD 阶段的 src/types.ts 中提取前端所需类型
- */
-
-export interface KnowledgePoint {
+export interface StudentOption {
   id: number;
-  code: string;
+  externalId: string;
   name: string;
-  description: string;
-  level: number;
+  gradeId: number;
+  gradeName: string;
+  className: string;
+  status: 'active' | 'inactive';
 }
 
-export interface KnowledgeRelation {
+export interface ExamOption {
   id: number;
-  fromId: number;
-  toId: number;
-  relationType: 'prerequisite' | 'postrequisite';
+  name: string;
+  examDate: string;
+  term?: string;
+}
+
+export interface SubjectScoreSummary {
+  subjectId: number;
+  subjectCode: string;
+  subjectName: string;
+  score: number;
+  totalScore: number;
+  classRank?: number;
+  gradeRank?: number;
+}
+
+export interface StudentOverview {
+  student: StudentOption;
+  exam: ExamOption;
+  subjects: SubjectScoreSummary[];
+  totalScore: number;
+  totalFullScore: number;
+  classRank: number;
+  gradeRank: number;
+}
+
+export interface ScoreTrendPoint {
+  examId: number;
+  examName: string;
+  examDate: string;
+  totalScore: number;
+  totalFullScore: number;
+  classRank: number;
+  gradeRank: number;
+}
+
+export interface SubjectTrendPoint {
+  examId: number;
+  examName: string;
+  examDate: string;
+  subjectId: number;
+  subjectCode: string;
+  subjectName: string;
+  score: number;
+  totalScore: number;
+}
+
+export interface StudentTrends {
+  scoreTrend: ScoreTrendPoint[];
+  subjectTrends: SubjectTrendPoint[];
+}
+
+export interface SubjectQuestionScore {
+  questionId: number;
+  questionNo: number;
+  title: string;
+  questionType: string;
+  maxScore: number;
+  score: number;
+  scoreRate: number;
+}
+
+export interface SubjectAnalysis {
+  student: StudentOption;
+  exam: ExamOption;
+  subject: SubjectScoreSummary;
+  questions: SubjectQuestionScore[];
+  weakQuestions: SubjectQuestionScore[];
 }
 
 export interface KnowledgeMastery {
   knowledgePointId: number;
+  knowledgePointCode: string;
   knowledgePointName: string;
-  masteryProbability: number;
+  masteryRate: number;
+  evidenceQuestionCount: number;
 }
 
-export interface DiagnosisResult {
-  studentId: number;
-  studentName: string;
-  overallMastery: number;
+export interface SubjectKnowledgeAnalysis {
+  student: StudentOption;
+  exam: ExamOption;
+  subject: SubjectScoreSummary;
   knowledges: KnowledgeMastery[];
-  suggestedNextSteps?: string[];
+  weakKnowledges: KnowledgeMastery[];
 }
 
-export interface StudentOption {
-  id: number;
-  name: string;
+export interface KnowledgeTrendPoint {
+  examId: number;
+  examName: string;
+  examDate: string;
+  subjectId: number;
+  knowledgePointId: number;
+  knowledgePointName: string;
+  masteryRate: number;
+}
+
+export interface KnowledgeTrendResponse {
+  trends: KnowledgeTrendPoint[];
+}
+
+export interface ImportSummary {
+  examId?: number;
+  examName?: string;
+  totalRows?: number;
+  importedScores?: number;
+  newStudents?: number;
+  updatedStudents?: number;
+  responseCount?: number;
+  warnings?: string[];
 }
 
 export type LoadingState = 'idle' | 'loading' | 'success' | 'error';

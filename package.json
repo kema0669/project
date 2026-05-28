@@ -1,0 +1,10 @@
+{
+  "name": "cognitive-diagnosis-mvp",
+  "private": true,
+  "scripts": {
+    "start": "powershell -ExecutionPolicy Bypass -File ./start-dev.ps1",
+    "dev": "powershell -ExecutionPolicy Bypass -File ./start-dev.ps1",
+    "test": "npm.cmd --prefix backend test",
+    "build": "npm.cmd --prefix frontend run build"
+  }
+}

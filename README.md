@@ -1,167 +1,218 @@
-# 智能化认知诊断 MVP
+# 智能化认知诊断与多学科成绩分析 MVP
 
-基于 DINA 模型的个性化学习分析系统，实现从学生作答记录到知识点掌握概率画像的端到端诊断链路。
+本项目是一个面向学校真实考试场景的轻量级教育数据分析系统。项目已从早期“单一数学 Q1-Q20 认知诊断 Demo”升级为“多年级、多学科、多考试批次、单科题目分析、考点掌握分析、AI 辅助试卷解析草稿”的完整 MVP。
 
-## 项目简介
+## 项目定位
 
-在"AI+教育"领域，精准评估学生的知识掌握程度（认知诊断）是实现个性化推荐和智能体辅导的基础。本项目是一个轻量级 MVP，包含：
+系统用于帮助老师和教研人员查看学生在不同考试中的成绩变化、排名变化、单科题目得分情况和考点掌握情况。
 
-- **Q 矩阵**（知识点-题目关联矩阵）：定义每一道题目考察了哪些具体的知识点
-- **X 矩阵**（学生-题目作答矩阵）：记录学生在测试中的真实表现（对/错）
-- **核心目标**：利用项目反应理论（IRT）中的 DINA 模型，结合知识图谱逻辑，通过分析 Q/X 矩阵，产出学生的知识掌握概率画像
+当前版本重点不是自动阅卷，而是构建一个清晰、可解释、可扩展的数据分析链路：
+
+```text
+学生 / 年级 / 班级
+-> 考试批次
+-> 学科试卷
+-> 每题得分
+-> 单科成绩
+-> 排名趋势
+-> 考点掌握
+-> AI 辅助试卷解析草稿
+```
+
+## 核心能力
+
+- 支持语文、数学、英语、物理、化学、生物、政治、历史、地理 9 门学科
+- 支持不同年级学习不同科目
+- 支持多次考试批次
+- 支持学生所学科目的成绩雷达图
+- 支持总分趋势、班级排名趋势、年级排名趋势
+- 支持各科成绩趋势
+- 支持单科题目分析
+- 支持每题满分、得分、得分率、低分题列表
+- 支持单科考点掌握地图
+- 支持考点掌握趋势和薄弱考点排序
+- 支持 AI 辅助试卷解析草稿流程
+- 支持老师确认后再进入正式入库流程
+- 支持一键启动
 
 ## 技术栈
 
-| 层级 | 技术 | 说明 |
-|------|------|------|
-| 前端 | React 19 + TypeScript + Vite 6 | 组件化开发，类型安全 |
-| 图表 | ECharts 5 | 雷达图 + 力导向知识图谱 |
-| 样式 | CSS Modules | 避免命名冲突，无运行时开销 |
-| 后端 | Node.js + Express 5 + TypeScript | 极简 REST API |
-| 数据库 | SQLite (better-sqlite3) | 轻量级文件数据库 |
-| 算法 | DINA 模型 + EM 算法 | 认知诊断核心参数估计 |
-| 测试 | Vitest + supertest | 单元测试 + 集成测试 + E2E 测试 |
+| 层级 | 技术 |
+| --- | --- |
+| 前端 | React 19、TypeScript、Vite、ECharts、CSS Modules |
+| 后端 | Node.js、Express 5、TypeScript |
+| 数据库 | SQLite、better-sqlite3 |
+| 测试 | Vitest、supertest |
+| AI 扩展点 | 试卷解析草稿、候选考点推荐、老师确认机制 |
 
 ## 项目结构
 
-```
+```text
 .
-├── README.md                 # 本文件
-├── CLAUDE.md                 # 项目说明书（作业要求）
-├── prompts.md                # 核心 Prompt 记录文档（5 阶段完整：Step 0~4）
-├── docs/
-│   ├── schema.md             # SDD 阶段：数据库 Schema、ER 图、API 契约
-│   ├── ui-design.md          # DDD 阶段：UI/UX 设计文档
-│   └── process.md            # 开发过程思路说明（业务转化、AI协同问题、效率思考）
-├── frontend/                 # DDD + Stage4 产物
-│   ├── package.json
-│   ├── vite.config.ts
+├── backend/                  后端 API、数据库、测试
+│   ├── src/
+│   │   ├── db.ts             SQLite Schema 与旧库兼容重建
+│   │   ├── seed.ts           多年级、多学科、多考试种子数据
+│   │   ├── diagnosis.ts      成绩分析、题目分析、考点掌握聚合
+│   │   ├── paperDrafts.ts    AI 辅助试卷解析草稿流程
+│   │   └── server.ts         Express API
+│   └── tests/                后端单元测试、集成测试、E2E 测试
+├── frontend/                 React 前端
 │   └── src/
-│       ├── App.tsx
-│       ├── types.ts
-│       ├── data/mock.ts      # API 客户端（Stage4 后调用真实接口）
-│       └── components/       # Header、RadarChart、KnowledgeGraph 等
-└── backend/                  # TDD + Stage4 产物
-    ├── package.json
-    ├── tsconfig.json
-    ├── src/
-    │   ├── types.ts          # 共享类型契约
-    │   ├── db.ts             # SQLite 建表
-    │   ├── seed.ts           # 种子数据（5知识点 x 20题 x 10学生）
-    │   ├── diagnosis.ts      # 数据库 -> DINA 算法整合层
-    │   ├── server.ts         # Express REST API
-    │   └── algorithm/
-    │       └── dina.ts       # DINA 模型 EM 算法实现
-    └── tests/
-        ├── db.test.ts        # 数据库层测试（8例）
-        ├── dina.test.ts      # 算法单元测试（5例）
-        ├── integration.test.ts # 整合测试（5例）
-        └── e2e.test.ts       # E2E 端到端测试（7例）
+│       ├── App.tsx           页面主流程
+│       ├── data/mock.ts      API 客户端封装
+│       └── components/       图表和分析组件
+├── docs/
+│   ├── ai-paper-workflow.md  AI 辅助试卷解析设计说明
+│   └── excel-import.md       Excel 导入格式说明
+├── RUNNING.md                一键运行说明
+├── start.bat                 Windows 双击启动脚本
+├── start-dev.ps1             PowerShell 启动脚本
+└── package.json              根目录统一命令
 ```
 
-## 快速开始
+## 一键运行
 
-### 环境要求
+推荐在项目根目录执行：
 
-- Node.js >= 20
-- npm >= 10
-
-### 安装与启动
-
-```bash
-# 1. 克隆仓库后进入项目根目录
-
-# 2. 安装并启动后端
-cd backend
-npm install
-npm run seed      # 初始化 SQLite 数据库与种子数据（仅需一次）
-npm start         # 启动 API 服务，默认监听 http://localhost:3000
-
-# 3. 另开终端，安装并启动前端
-cd frontend
-npm install
-npm run dev       # 启动开发服务器，默认 http://localhost:5173
+```powershell
+npm.cmd start
 ```
 
-### 访问应用
+或者直接双击：
 
-浏览器打开 `http://localhost:5173`，选择学生后即可查看：
-- 认知雷达图（五维掌握概率）
-- 知识掌握地图（力导向图谱）
-- 诊断详情列表
-- AI 个性化学习建议
+```text
+start.bat
+```
 
-## 核心算法：DINA 模型
+启动后访问：
 
-本项目采用 **DINA (Deterministic Inputs, Noisy "And" gate)** 模型，核心假设：
+```text
+http://localhost:5173
+```
 
-> 学生答对某题当且仅当他掌握了该题考察的所有知识点（确定性 AND 门），但存在两种噪声：
-> - **Slip (s)**：掌握了却答错的概率
-> - **Guess (g)**：没掌握却猜对的概率
+后端默认运行在：
 
-### 参数估计流程（EM 算法）
+```text
+http://localhost:3000
+```
 
-1. **初始化**：slip = 0.1，guess = 0.2，属性模式均匀先验
-2. **E-step**：基于当前参数，计算每个学生属于各属性掌握模式的后验概率
-3. **M-step**：更新 slip、guess 及模式先验分布
-4. **输出**：每个学生在每个知识点上的**边际掌握概率** P(αₖ = 1)
+## 手动运行
 
-### 数值稳定性
+如果你想分别启动前后端：
 
-E-step 使用**对数似然**配合 log-sum-exp 技巧，避免 20 题连续相乘导致的浮点下溢。slip/guess 参数裁剪至 [0.01, 0.4] 防止退化。
+```powershell
+cd C:\Users\User\Desktop\project\backend
+npm.cmd install
+npm.cmd start
+```
 
-## 三大开发范式
+再打开另一个终端：
 
-### 1. SDD（契约/模型驱动）
-
-- 先定义数据库 Schema（6 张表）、ER 图、API 接口契约
-- `docs/schema.md` 作为后续前端（DDD）与算法（TDD）的"锚点"
-- 类型定义严格对齐 Schema，前后端共享同一套数据契约
-
-### 2. DDD（设计驱动）
-
-- 以 UI/UX 设计为"宪法"驱动前端组件拆分
-- `docs/ui-design.md` 包含布局、交互流程、视觉规范、Mock 数据策略
-- 前端组件预留 `DiagnosisResult` props 注入点，便于后续替换真实数据源
-
-### 3. TDD（测试驱动）
-
-- **数据库层**：先写 `db.test.ts`（红）→ 实现 `db.ts` + `seed.ts`（绿）
-- **算法层**：先写 `dina.test.ts`（红）→ 实现 `dina.ts` EM 算法（绿）
-- **整合层**：先写 `integration.test.ts`（红）→ 实现 `diagnosis.ts`（绿）
-- **E2E 层**：使用 supertest 验证完整 API 链路
+```powershell
+cd C:\Users\User\Desktop\project\frontend
+npm.cmd install
+npm.cmd run dev
+```
 
 ## 测试
 
-```bash
-cd backend
-npm test          # 运行全部 25 个测试
+在项目根目录执行：
+
+```powershell
+npm.cmd test
+npm.cmd run build
 ```
 
-| 测试文件 | 用例数 | 覆盖内容 |
-|----------|--------|----------|
-| `db.test.ts` | 8 | 建表、种子数据、Q/X 矩阵导出 |
-| `dina.test.ts` | 5 | 理想反应模式、似然计算、确定性案例、边界检查、收敛性 |
-| `integration.test.ts` | 5 | 数据库 -> DINA 算法整合，学生画像排序验证 |
-| `e2e.test.ts` | 7 | API 端到端：学生列表、诊断结果、404、建议接口 |
+当前验证结果：
 
-## 交付物清单
+```text
+backend tests: 34 passed
+frontend build: passed
+```
 
-- [x] 完整项目源码（本仓库）
-- [x] 算法逻辑说明（见上文"核心算法"及 `backend/src/algorithm/dina.ts` 注释）
-- [x] 开发文档（`docs/schema.md`、`docs/ui-design.md`、`docs/process.md`、`prompts.md`）
-- [x] 环境配置与运行指南（见上文"快速开始"）
-- [x] 清晰的 Git Commit 演进历史（SDD → DDD → TDD → Stage 4）
-- [x] 核心 Prompt 记录文档（≥ 5 段，Step 0~4 完整）
+## 主要 API
 
-## 隐藏需求（加分项）
+### 学生与考试
 
-**LLM 个性化学习建议**
+```text
+GET /api/students
+GET /api/exams
+GET /api/students/:studentId/subjects
+```
 
-后端 `POST /api/diagnosis/suggest` 接口：
-- 优先调用真实大模型 API（OpenAI 兼容接口，需配置环境变量 `OPENAI_API_KEY`）
-- 无 API Key 时**退化**到规则模板生成建议，保证功能随时可用
-- 前端实时展示建议文本
+### 多学科成绩总览
+
+```text
+GET /api/students/:studentId/exams/:examId/overview
+GET /api/students/:studentId/trends
+```
+
+### 单科题目分析
+
+```text
+GET /api/students/:studentId/exams/:examId/subjects/:subjectId
+```
+
+返回单科总分、班级排名、年级排名、每题满分、每题得分、得分率和低分题列表。
+
+### 单科考点掌握
+
+```text
+GET /api/students/:studentId/exams/:examId/subjects/:subjectId/knowledge
+GET /api/students/:studentId/subjects/:subjectId/knowledge-trends
+```
+
+考点掌握率基于“每题得分率 × 题目-考点权重”聚合得到，当前阶段强调可解释性。
+
+### AI 辅助试卷解析草稿
+
+```text
+POST /api/paper-drafts
+GET /api/paper-drafts/:draftId
+POST /api/paper-drafts/:draftId/confirm
+```
+
+当前版本使用规则引擎模拟 AI 推荐考点。真实 LLM、OCR、Word/PDF 解析可以在 `backend/src/paperDrafts.ts` 中替换候选生成逻辑。
+
+## 五阶段开发成果
+
+### 阶段一：数据模型升级
+
+从固定 Q1-Q20 模型升级为：
+
+```text
+年级 -> 学科 -> 考试 -> 试卷 -> 题目 -> 学生成绩 -> 考点映射
+```
+
+### 阶段二：多学科成绩总览
+
+实现学生选择、考试选择、学科成绩雷达图、总分趋势、班级排名趋势、年级排名趋势、各科成绩趋势。
+
+### 阶段三：单科题目分析
+
+实现单科总分、单科排名、每题满分、每题得分、每题得分率、低分题列表。
+
+### 阶段四：单科考点掌握分析
+
+实现考点掌握地图、考点掌握趋势、薄弱考点排序。
+
+### 阶段五：AI 辅助试卷解析扩展点
+
+实现试卷解析草稿、候选考点推荐、老师确认机制。AI 推荐结果不会直接写入正式试卷表，避免错误污染正式数据。
+
+## 数据库兼容说明
+
+项目启动时会检测旧版 Demo 数据库。如果发现旧表结构，例如旧 `students` 表没有 `grade_id`，系统会自动重建为新版多学科 schema，并写入新的种子数据。
+
+## 后续可扩展方向
+
+- 长表 Excel 导入
+- 老师确认草稿后的正式入库 UI
+- Word/PDF 试卷文本解析
+- OCR 识别扫描件
+- 接入真实 LLM 推荐题目考点
+- 更细粒度的班级、年级、学期管理
 
 ## License
 

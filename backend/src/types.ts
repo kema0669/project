@@ -1,68 +1,86 @@
-/**
- * TDD 阶段：共享类型定义
- * 严格继承 SDD 阶段的 schema 契约
- */
-
-export interface KnowledgePoint {
+export interface Grade {
   id: number;
   code: string;
   name: string;
-  description: string;
-  level: number;
+  stage: string;
 }
 
-export interface KnowledgeRelation {
+export interface Subject {
   id: number;
-  fromId: number;
-  toId: number;
-  relationType: 'prerequisite' | 'postrequisite';
-}
-
-export interface Question {
-  id: number;
-  content: string;
-  type: string;
-  difficulty: number;
-}
-
-export interface QuestionKnowledgeMap {
-  id: number;
-  questionId: number;
-  knowledgePointId: number;
-  weight: number;
+  code: string;
+  name: string;
+  displayOrder: number;
 }
 
 export interface Student {
   id: number;
+  externalId: string;
   name: string;
+  gradeId: number;
+  gradeName?: string;
+  className: string;
+  status: 'active' | 'inactive';
 }
 
-export interface Response {
+export interface ExamBatch {
   id: number;
-  studentId: number;
-  questionId: number;
-  isCorrect: number;
-  responseTime?: number;
-  createdAt?: string;
+  name: string;
+  examDate: string;
+  term?: string;
 }
 
-/** 算法层输出 */
-export interface MasteryProbability {
-  studentId: number;
-  knowledgePointId: number;
-  probability: number;
+export interface Paper {
+  id: number;
+  examId: number;
+  gradeId: number;
+  subjectId: number;
+  name: string;
+  totalScore: number;
 }
 
-/** Q 矩阵：题目 × 知识点 */
-export interface QMatrixEntry {
-  questionId: number;
-  knowledgePointId: number;
-  weight: number;
+export interface PaperQuestion {
+  id: number;
+  paperId: number;
+  questionNo: number;
+  title: string;
+  questionType: string;
+  maxScore: number;
 }
 
-/** X 矩阵：学生 × 题目 */
-export interface XMatrixEntry {
+export interface KnowledgePoint {
+  id: number;
+  subjectId: number;
+  code: string;
+  name: string;
+  description?: string;
+  level: number;
+}
+
+export interface StudentScore {
+  id: number;
+  examId: number;
   studentId: number;
-  questionId: number;
-  isCorrect: number;
+  subjectId: number;
+  paperId: number;
+  score: number;
+  classRank?: number;
+  gradeRank?: number;
+}
+
+export interface QuestionScore {
+  id: number;
+  examId: number;
+  studentId: number;
+  paperQuestionId: number;
+  score: number;
+}
+
+export interface SubjectScoreSummary {
+  subjectId: number;
+  subjectCode: string;
+  subjectName: string;
+  score: number;
+  totalScore: number;
+  classRank?: number;
+  gradeRank?: number;
 }

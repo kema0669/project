@@ -1,109 +1,100 @@
 import { useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
-import type { KnowledgeMastery } from '../types';
-import { mockKnowledgePoints, mockKnowledgeRelations } from '../data/mock';
+import type { KnowledgeTrendPoint, SubjectKnowledgeAnalysis } from '../types';
 import styles from './KnowledgeGraph.module.css';
 
 interface Props {
-  knowledges: KnowledgeMastery[];
+  analysis: SubjectKnowledgeAnalysis | null;
+  trends: KnowledgeTrendPoint[];
 }
 
-export default function KnowledgeGraph({ knowledges }: Props) {
-  const chartRef = useRef<HTMLDivElement>(null);
-  const chartInstance = useRef<echarts.ECharts | null>(null);
+export default function KnowledgeGraph({ analysis, trends }: Props) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const trendRef = useRef<HTMLDivElement>(null);
+  const mapChart = useRef<echarts.ECharts | null>(null);
+  const trendChart = useRef<echarts.ECharts | null>(null);
 
   useEffect(() => {
-    if (!chartRef.current) return;
+    if (!analysis || !mapRef.current || !trendRef.current) return;
+    if (!mapChart.current) mapChart.current = echarts.init(mapRef.current);
+    if (!trendChart.current) trendChart.current = echarts.init(trendRef.current);
 
-    if (!chartInstance.current) {
-      chartInstance.current = echarts.init(chartRef.current);
-    }
-
-    const masteryMap = new Map(knowledges.map((k) => [k.knowledgePointId, k.masteryProbability]));
-
-    const nodes = mockKnowledgePoints.map((kp) => {
-      const mastery = masteryMap.get(kp.id) ?? 0;
-      let color = '#EF4444';
-      if (mastery >= 0.8) color = '#10B981';
-      else if (mastery >= 0.5) color = '#F59E0B';
-
-      return {
-        id: String(kp.id),
-        name: kp.name,
-        value: Math.round(mastery * 100),
-        symbolSize: 40 + mastery * 40,
-        itemStyle: { color },
-        label: {
-          show: true,
-          fontSize: 13,
-          fontWeight: 500,
-        },
-      };
-    });
-
-    const links = mockKnowledgeRelations.map((rel) => ({
-      source: String(rel.fromId),
-      target: String(rel.toId),
-      lineStyle: {
-        curveness: 0.2,
-        color: '#94a3b8',
-      },
-      label: {
-        show: true,
-        formatter: '前序',
-        fontSize: 10,
-        color: '#64748b',
-      },
-    }));
-
-    const option: echarts.EChartsOption = {
-      title: {
-        text: '🧠 知识掌握地图',
-        left: 'center',
-        top: 8,
-        textStyle: { fontSize: 16, fontWeight: 600, color: '#1e293b' },
-      },
-      tooltip: {
-        formatter: (params: any) => {
-          if (params.dataType === 'node') {
-            return `<b>${params.name}</b><br/>掌握度：${params.value}%`;
-          }
-          return '';
-        },
+    mapChart.current.setOption({
+      title: { text: '考点掌握地图', left: 12, top: 8, textStyle: { fontSize: 15, color: '#0f172a' } },
+      tooltip: { trigger: 'axis' },
+      grid: { left: 96, right: 24, top: 58, bottom: 28 },
+      xAxis: { type: 'value', min: 0, max: 100 },
+      yAxis: {
+        type: 'category',
+        data: analysis.knowledges.map((item) => item.knowledgePointName),
       },
       series: [
         {
-          type: 'graph',
-          layout: 'force',
-          data: nodes,
-          links,
-          roam: true,
-          label: { position: 'bottom' },
-          force: {
-            repulsion: 300,
-            edgeLength: 120,
-          },
-          emphasis: {
-            focus: 'adjacency',
-            lineStyle: { width: 3 },
+          type: 'bar',
+          data: analysis.knowledges.map((item) => Math.round(item.masteryRate * 100)),
+          itemStyle: {
+            color: (params: { dataIndex: number }) =>
+              analysis.knowledges[params.dataIndex].masteryRate < 0.7 ? '#dc2626' : '#2563eb',
           },
         },
       ],
+    });
+
+    const labels = [...new Set(trends.map((item) => item.examName))];
+    const names = [...new Set(trends.map((item) => item.knowledgePointName))];
+    trendChart.current.setOption({
+      title: { text: '考点掌握趋势', left: 12, top: 8, textStyle: { fontSize: 15, color: '#0f172a' } },
+      tooltip: { trigger: 'axis' },
+      legend: { top: 36, type: 'scroll' },
+      grid: { left: 48, right: 24, top: 82, bottom: 34 },
+      xAxis: { type: 'category', data: labels },
+      yAxis: { type: 'value', min: 0, max: 100 },
+      series: names.map((name) => ({
+        name,
+        type: 'line',
+        smooth: true,
+        data: labels.map((label) => {
+          const point = trends.find((item) => item.examName === label && item.knowledgePointName === name);
+          return point ? Math.round(point.masteryRate * 100) : null;
+        }),
+      })),
+    });
+
+    const resize = () => {
+      mapChart.current?.resize();
+      trendChart.current?.resize();
     };
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, [analysis, trends]);
 
-    chartInstance.current.setOption(option);
-
-    const handleResize = () => chartInstance.current?.resize();
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [knowledges]);
+  if (!analysis) {
+    return (
+      <section className={styles.card}>
+        <h3 className={styles.title}>单科考点掌握</h3>
+        <div className={styles.empty}>请选择一个科目查看考点掌握情况</div>
+      </section>
+    );
+  }
 
   return (
-    <div className={styles.card}>
-      <div ref={chartRef} className={styles.chart} />
-    </div>
+    <section className={styles.card}>
+      <div className={styles.header}>
+        <div>
+          <span>{analysis.subject.subjectName}</span>
+          <h3>单科考点掌握</h3>
+        </div>
+        <div className={styles.weakList}>
+          <span>薄弱考点：</span>
+          {analysis.weakKnowledges.length > 0
+            ? analysis.weakKnowledges.map((item) => item.knowledgePointName).join('、')
+            : '暂无明显薄弱考点'}
+        </div>
+      </div>
+      <div className={styles.grid}>
+        <div ref={mapRef} className={styles.chart} />
+        <div ref={trendRef} className={styles.chart} />
+      </div>
+    </section>
   );
 }

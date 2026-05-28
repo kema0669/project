@@ -1,59 +1,42 @@
 import { useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
-import type { KnowledgeMastery } from '../types';
+import type { SubjectScoreSummary } from '../types';
 import styles from './RadarChart.module.css';
 
 interface Props {
-  knowledges: KnowledgeMastery[];
+  subjects: SubjectScoreSummary[];
 }
 
-export default function RadarChart({ knowledges }: Props) {
+export default function RadarChart({ subjects }: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
 
   useEffect(() => {
     if (!chartRef.current) return;
+    if (!chartInstance.current) chartInstance.current = echarts.init(chartRef.current);
 
-    if (!chartInstance.current) {
-      chartInstance.current = echarts.init(chartRef.current);
-    }
-
-    const indicator = knowledges.map((k) => ({
-      name: k.knowledgePointName,
-      max: 1,
-    }));
-
-    const values = knowledges.map((k) => Number(k.masteryProbability.toFixed(2)));
-
-    const option: echarts.EChartsOption = {
+    chartInstance.current.setOption({
       title: {
-        text: '📊 认知雷达图',
+        text: '学科成绩雷达图',
         left: 'center',
         top: 8,
         textStyle: { fontSize: 16, fontWeight: 600, color: '#1e293b' },
       },
       tooltip: {
         trigger: 'item',
-        formatter: (params: any) => {
-          const data = params.value as number[];
-          return knowledges
-            .map((k, i) => `${k.knowledgePointName}: ${(data[i] * 100).toFixed(0)}%`)
-            .join('<br/>');
-        },
+        formatter: () =>
+          subjects
+            .map((subject) => `${subject.subjectName}: ${subject.score}/${subject.totalScore}`)
+            .join('<br/>'),
       },
       radar: {
-        indicator,
+        indicator: subjects.map((subject) => ({
+          name: subject.subjectName,
+          max: subject.totalScore,
+        })),
         radius: '65%',
-        center: ['50%', '55%'],
-        axisName: {
-          color: '#475569',
-          fontSize: 12,
-        },
-        splitArea: {
-          areaStyle: {
-            color: ['rgba(37, 99, 235, 0.02)', 'rgba(37, 99, 235, 0.06)'],
-          },
-        },
+        center: ['50%', '56%'],
+        axisName: { color: '#475569', fontSize: 12 },
         axisLine: { lineStyle: { color: '#cbd5e1' } },
         splitLine: { lineStyle: { color: '#cbd5e1' } },
       },
@@ -62,33 +45,21 @@ export default function RadarChart({ knowledges }: Props) {
           type: 'radar',
           data: [
             {
-              value: values,
-              name: '掌握概率',
-              areaStyle: {
-                color: 'rgba(37, 99, 235, 0.25)',
-              },
-              lineStyle: {
-                color: '#2563EB',
-                width: 2,
-              },
-              itemStyle: {
-                color: '#2563EB',
-              },
+              value: subjects.map((subject) => subject.score),
+              name: '成绩',
+              areaStyle: { color: 'rgba(37, 99, 235, 0.22)' },
+              lineStyle: { color: '#2563eb', width: 2 },
+              itemStyle: { color: '#2563eb' },
             },
           ],
         },
       ],
-    };
+    });
 
-    chartInstance.current.setOption(option);
-
-    const handleResize = () => chartInstance.current?.resize();
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [knowledges]);
+    const resize = () => chartInstance.current?.resize();
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, [subjects]);
 
   return (
     <div className={styles.card}>

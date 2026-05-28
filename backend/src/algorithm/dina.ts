@@ -29,12 +29,14 @@ function buildDenseQ(qMatrix: QMatrixEntry[], nItems: number, nAttrs: number): n
 }
 
 /** 将稀疏 X 矩阵转为密集二维数组 X[student][item] */
-function buildDenseX(xMatrix: XMatrixEntry[], nStudents: number, nItems: number): number[][] {
+function buildDenseX(xMatrix: XMatrixEntry[], studentIds: number[], nItems: number): number[][] {
+  const studentIndex = new Map(studentIds.map((id, index) => [id, index]));
+  const nStudents = studentIds.length;
   const X: number[][] = Array.from({ length: nStudents }, () => Array(nItems).fill(0));
   for (const entry of xMatrix) {
-    const j = entry.studentId - 1;
+    const j = studentIndex.get(entry.studentId) ?? -1;
     const i = entry.questionId - 1;
-    if (j >= 0 && j < nStudents && i >= 0 && i < nItems) {
+    if (j >= 0 && i >= 0 && i < nItems) {
       X[j][i] = entry.isCorrect;
     }
   }
@@ -142,6 +144,8 @@ export function estimateDINA(
   xMatrix: XMatrixEntry[],
   options: DINAOptions = {}
 ): MasteryProbability[] {
+  if (qMatrix.length === 0 || xMatrix.length === 0) return [];
+
   const {
     maxIterations = 100,
     tolerance = 1e-5,
@@ -149,13 +153,14 @@ export function estimateDINA(
     guessInit = 0.2,
   } = options;
 
-  // 推断维度（假设 ID 从 1 开始连续）
+  // 推断维度。学生 ID 可能因为导入/离班而不连续，因此显式保留真实 ID。
   const nItems = Math.max(...qMatrix.map((e) => e.questionId));
   const nAttrs = Math.max(...qMatrix.map((e) => e.knowledgePointId));
-  const nStudents = Math.max(...xMatrix.map((e) => e.studentId));
+  const studentIds = [...new Set(xMatrix.map((e) => e.studentId))].sort((a, b) => a - b);
+  const nStudents = studentIds.length;
 
   const Q = buildDenseQ(qMatrix, nItems, nAttrs);
-  const X = buildDenseX(xMatrix, nStudents, nItems);
+  const X = buildDenseX(xMatrix, studentIds, nItems);
   const patterns = generateAttributePatterns(nAttrs);
   const nPatterns = patterns.length;
 
@@ -268,7 +273,7 @@ export function estimateDINA(
         prob += finalPosterior[j][m] * patterns[m][k];
       }
       result.push({
-        studentId: j + 1,
+        studentId: studentIds[j],
         knowledgePointId: k + 1,
         probability: Math.round(prob * 1000) / 1000,
       });
