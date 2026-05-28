@@ -209,23 +209,3 @@ POST /api/teacher/uploads/:uploadId/confirm
 GET  /api/student/me/results
 GET  /api/student/me/diagnosis?examId=:examId
 ```
-
-## Screenshots
-
-将项目截图放到 `docs/screenshots/` 后，README 会直接展示完整演示闭环：
-
-![Login](docs/screenshots/01-login.png)
-
-![Teacher Upload](docs/screenshots/02-teacher-upload.png)
-
-![Upload Preview](docs/screenshots/03-upload-preview.png)
-
-![Student Diagnosis](docs/screenshots/04-student-diagnosis.png)
-
-## 面试讲解定位
-
-这个项目可以包装为：
-
-> A full-stack AI-powered educational diagnosis platform with teacher/student portals, role-based access control, Excel score import with validation preview, DINA-based cognitive diagnosis, and student-facing mastery visualizations.
-
-核心讲解重点是工程闭环和 AI 协作过程，而不是堆功能。
